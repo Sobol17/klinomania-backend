@@ -20,7 +20,7 @@ class ClientAuthController extends Controller
             'phone' => ['required', 'string', 'max:32'],
         ]);
 
-        $code = (string) random_int(1000, 9999);
+        $code = $this->generateClientCode();
 
         AuthCode::create([
             'phone' => $data['phone'],
@@ -29,7 +29,7 @@ class ClientAuthController extends Controller
             'expires_at' => now()->addMinutes(5),
         ]);
 
-        $smsGateway->send($data['phone'], "Код входа Klinomania: {$code}");
+        $smsGateway->send($data['phone'], "Klinomania: Ваш код для входа: {$code}");
 
         return response()->json(['message' => 'Code sent.']);
     }
@@ -49,7 +49,7 @@ class ClientAuthController extends Controller
             ->latest()
             ->first();
 
-        if (! $authCode || $authCode->attempts >= 5 || ! Hash::check($data['code'], $authCode->code_hash)) {
+        if (! $authCode || $authCode->attempts >= 5 || ! $this->isValidClientCode($data['code'], $authCode)) {
             $authCode?->increment('attempts');
 
             return response()->json(['message' => 'Invalid code.'], 422);
@@ -68,5 +68,29 @@ class ClientAuthController extends Controller
             'token' => $user->createToken('client-mobile')->plainTextToken,
             'user' => $user,
         ]);
+    }
+
+    private function isValidClientCode(string $code, AuthCode $authCode): bool
+    {
+        if (config('klinomania.auth.client_otp_stub_enabled')) {
+            return hash_equals((string) config('klinomania.auth.client_otp_stub_code'), $code);
+        }
+
+        return Hash::check($code, $authCode->code_hash);
+    }
+
+    private function generateClientCode(): string
+    {
+        $stubCode = (string) config('klinomania.auth.client_otp_stub_code');
+
+        if (config('klinomania.auth.client_otp_stub_enabled')) {
+            return $stubCode;
+        }
+
+        do {
+            $code = (string) random_int(1000, 9999);
+        } while ($code === $stubCode);
+
+        return $code;
     }
 }

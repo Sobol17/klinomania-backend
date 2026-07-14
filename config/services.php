@@ -35,10 +35,10 @@ return [
         ],
     ],
 
-    'noticend' => [
-        'base_url' => env('NOTICEND_BASE_URL'),
-        'token' => env('NOTICEND_TOKEN'),
-        'sender' => env('NOTICEND_SENDER'),
+    'notisend' => [
+        'base_url' => env('NOTISEND_BASE_URL', 'https://sms.notisend.ru'),
+        'project' => env('NOTISEND_PROJECT', 'klinomania'),
+        'api_key' => env('NOTISEND_API_KEY', env('NOTISEND_TOKEN')),
     ],
 
 ];

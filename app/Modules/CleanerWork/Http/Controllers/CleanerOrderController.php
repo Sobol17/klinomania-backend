@@ -18,7 +18,7 @@ class CleanerOrderController extends Controller
         return response()->json([
             'data' => CleaningOrder::query()
                 ->with(['service', 'client.clientProfile'])
-                ->where('status', OrderStatus::Pending)
+                ->whereIn('status', [OrderStatus::Pending, OrderStatus::AwaitingCleaner])
                 ->latest()
                 ->get(),
         ]);
@@ -41,7 +41,7 @@ class CleanerOrderController extends Controller
     public function accept(Request $request, CleaningOrder $order): JsonResponse
     {
         abort_unless($request->user()->role === UserRole::Cleaner, 403);
-        abort_unless($order->status === OrderStatus::Pending, 409);
+        abort_unless(in_array($order->status, [OrderStatus::Pending, OrderStatus::AwaitingCleaner], true), 409);
 
         $order->forceFill([
             'cleaner_id' => $request->user()->id,

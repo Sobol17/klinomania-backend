@@ -24,11 +24,11 @@ class CleanerAuthController extends Controller
             ->with('cleanerProfile')
             ->first();
 
-        if (! $cleaner || ! $cleaner->cleanerProfile?->is_active || ! $cleaner->cleanerProfile->access_code_hash) {
+        if (! $cleaner || ! $cleaner->cleanerProfile?->is_active) {
             return response()->json(['message' => 'Invalid credentials.'], 422);
         }
 
-        if (! Hash::check($data['code'], $cleaner->cleanerProfile->access_code_hash)) {
+        if (! $this->isValidCleanerCode($data['code'], $cleaner->cleanerProfile->access_code_hash)) {
             return response()->json(['message' => 'Invalid credentials.'], 422);
         }
 
@@ -36,5 +36,14 @@ class CleanerAuthController extends Controller
             'token' => $cleaner->createToken('cleaner-mobile')->plainTextToken,
             'user' => $cleaner,
         ]);
+    }
+
+    private function isValidCleanerCode(string $code, ?string $codeHash): bool
+    {
+        if (config('klinomania.auth.cleaner_code_stub_enabled')) {
+            return hash_equals((string) config('klinomania.auth.cleaner_code_stub_code'), $code);
+        }
+
+        return $codeHash !== null && Hash::check($code, $codeHash);
     }
 }

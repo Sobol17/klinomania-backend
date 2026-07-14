@@ -5,6 +5,7 @@ use App\Modules\Identity\Http\Controllers\CleanerAuthController;
 use App\Modules\Identity\Http\Controllers\ClientAuthController;
 use App\Modules\Orders\Http\Controllers\ClientOrderController;
 use App\Modules\Profiles\Http\Controllers\ProfileController;
+use App\Modules\Services\Http\Controllers\ClientServiceController;
 use App\Modules\Services\Http\Controllers\ServiceController;
 use Illuminate\Support\Facades\Route;
 
@@ -16,7 +17,13 @@ Route::prefix('v1')->group(function (): void {
     Route::get('services', [ServiceController::class, 'index']);
 
     Route::middleware('auth:sanctum')->group(function (): void {
+        Route::get('client/home-summary', [ClientServiceController::class, 'homeSummary']);
+        Route::get('client/services', [ClientServiceController::class, 'index']);
+        Route::get('client/services/{serviceId}', [ClientServiceController::class, 'show']);
+        Route::post('client/service-quotes', [ClientServiceController::class, 'quote']);
+        Route::post('client/orders', [ClientServiceController::class, 'createOrder']);
         Route::get('client/profile', [ProfileController::class, 'client']);
+        Route::patch('client/profile', [ProfileController::class, 'updateClient']);
         Route::get('client/orders', [ClientOrderController::class, 'index']);
         Route::post('client/orders/checkout', [ClientOrderController::class, 'checkout']);
 
