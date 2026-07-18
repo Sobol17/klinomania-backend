@@ -14,7 +14,7 @@ return new class extends Migration
             $table->foreignId('client_id')->constrained('users')->cascadeOnDelete();
             $table->foreignId('cleaner_id')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('cleaning_service_id')->constrained()->restrictOnDelete();
-            $table->string('status')->default(OrderStatus::Pending->value)->index();
+            $table->string('status')->default(OrderStatus::Processing->value)->index();
             $table->string('address');
             $table->timestamp('scheduled_at')->nullable();
             $table->text('comment')->nullable();

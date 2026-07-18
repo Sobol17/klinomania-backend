@@ -18,7 +18,7 @@ class EditUser extends EditRecord
     {
         return [
             Action::make('generateCleanerCode')
-                ->label('Generate cleaner code')
+                ->label('Сгенерировать код клинера')
                 ->visible(fn (): bool => $this->record->role === UserRole::Cleaner)
                 ->action(function (): void {
                     $code = (string) random_int(100000, 999999);
@@ -29,7 +29,7 @@ class EditUser extends EditRecord
                     ]);
 
                     Notification::make()
-                        ->title("Cleaner code: {$code}")
+                        ->title("Код клинера: {$code}")
                         ->warning()
                         ->send();
                 }),

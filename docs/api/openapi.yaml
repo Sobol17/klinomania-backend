@@ -12,7 +12,9 @@ tags:
   - name: Services
   - name: Client Orders
   - name: Cleaner Orders
+  - name: Payments
   - name: Profiles
+  - name: Push Notifications
 paths:
   /client/auth/request-code:
     post:
@@ -160,45 +162,6 @@ paths:
                 properties:
                   data: {$ref: '#/components/schemas/ClientServiceDetail'}
         '404': {$ref: '#/components/responses/NotFound'}
-  /client/service-quotes:
-    post:
-      tags: [Services]
-      summary: Calculate a server-side service quote
-      security: [{bearerAuth: []}]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/CreateServiceQuoteRequest'}
-      responses:
-        '200':
-          description: Quote created
-          content:
-            application/json:
-              schema:
-                type: object
-                properties: {data: {$ref: '#/components/schemas/ServiceQuote'}}
-        '422': {$ref: '#/components/responses/ValidationError'}
-  /client/orders:
-    post:
-      tags: [Client Orders]
-      summary: Create an order from a quote
-      security: [{bearerAuth: []}]
-      parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema: {type: string, format: uuid}
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/CreateQuotedOrderRequest'}
-      responses:
-        '201': {description: Created order}
-        '200': {description: Idempotent replay}
-        '409': {$ref: '#/components/responses/Conflict'}
-        '410': {description: Quote expired}
   /client/profile:
     get:
       tags: [Profiles]
@@ -295,35 +258,52 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-  /client/orders/checkout:
     post:
       tags: [Client Orders]
-      summary: Create cleaning order
-      security:
-        - bearerAuth: []
+      summary: Create a cleaning order
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, format: uuid}
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/CheckoutRequest'
+            schema: {$ref: '#/components/schemas/CreateOrderRequest'}
       responses:
         '201':
           description: Created order
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/CleaningOrderResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/ValidationError'
+              schema: {$ref: '#/components/schemas/CreateOrderResponse'}
+        '200': {description: Idempotent replay}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429': {description: Order creation rate limit exceeded}
+  /client/push-token:
+    post:
+      tags: [Push Notifications]
+      summary: Register the current client's Firebase Cloud Messaging token
+      description: Stores the current client's last active FCM token. Register it after authentication and whenever Firebase refreshes the token. Delivery is controlled by the client's push_notifications_enabled preference.
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PushTokenRequest'}
+      responses:
+        '204': {description: Token stored}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/ValidationError'}
   /cleaner/orders/available:
     get:
       tags: [Cleaner Orders]
-      summary: List pending orders available to cleaners
+      summary: List confirmed orders with an incomplete team
       security:
         - bearerAuth: []
       responses:
@@ -337,15 +317,16 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-  /cleaner/orders/history:
+  /cleaner/orders:
     get:
       tags: [Cleaner Orders]
-      summary: List completed orders for current cleaner
+      summary: List current cleaner's orders after confirmation
+      description: Returns the current cleaner's team_formed, in_progress, awaiting_payment, and completed orders.
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: Completed orders
+          description: Cleaner orders
           content:
             application/json:
               schema:
@@ -354,17 +335,58 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-  /cleaner/orders/{order}/accept:
-    post:
+  /cleaner/orders/history:
+    get:
       tags: [Cleaner Orders]
-      summary: Accept pending order
+      summary: List orders whose cleaning work is finished for current cleaner
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Orders awaiting payment or completed after payment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CleaningOrderListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /cleaner/orders/{order}:
+    get:
+      tags: [Cleaner Orders]
+      summary: Get an assigned order with selected extra services
       security:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/OrderId'
       responses:
         '200':
-          description: Accepted order
+          description: Cleaner order detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CleanerOrderDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /cleaner/orders/{order}/accept:
+    post:
+      tags: [Cleaner Orders]
+      summary: Join a confirmed order team
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Order with an updated team
           content:
             application/json:
               schema:
@@ -378,7 +400,7 @@ paths:
   /cleaner/orders/{order}/start:
     post:
       tags: [Cleaner Orders]
-      summary: Start accepted order
+      summary: Start a formed order team assignment
       security:
         - bearerAuth: []
       parameters:
@@ -417,6 +439,50 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+  /client/orders/{order}/cancel:
+    post:
+      tags: [Client Orders]
+      summary: Cancel an order before its team is formed
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Cancelled order
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CleaningOrderResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /client/orders/{order}/payment:
+    post:
+      tags: [Payments]
+      summary: Create or retrieve a T-Bank payment link for an order
+      description: Available only to the order owner while the order status is awaiting_payment. The order is completed only after a signed T-Bank server notification with status CONFIRMED.
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: T-Bank hosted payment form link
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PaymentLinkResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '502': {description: T-Bank payment service is unavailable}
+  /payments/tbank/notifications:
+    post:
+      tags: [Payments]
+      summary: Receive a T-Bank payment status notification
+      description: Server-to-server endpoint. It validates the T-Bank Token and returns plain text OK after processing a valid notification.
+      security: []
+      responses:
+        '200': {description: Notification processed}
+        '403': {description: Invalid T-Bank signature or terminal}
+        '404': {description: Unknown payment attempt}
 components:
   securitySchemes:
     bearerAuth:
@@ -429,8 +495,8 @@ components:
       in: path
       required: true
       schema:
-        type: integer
-        minimum: 1
+        type: string
+        description: Public order ULID
   responses:
     Unauthorized:
       description: Unauthenticated
@@ -508,35 +574,59 @@ components:
             room_options: {type: array, items: {$ref: '#/components/schemas/ServiceOption'}}
             cleaning_options: {type: array, items: {$ref: '#/components/schemas/ServiceOption'}}
             extra_options: {type: array, items: {$ref: '#/components/schemas/ServiceOption'}}
-    CreateServiceQuoteRequest:
+    CreateOrderRequest:
       type: object
-      required: [service_id, area_sqm, room_option_id, cleaning_option_id]
+      required: [service_id, extra_option_ids, address, scheduled_at]
       properties:
         service_id: {type: string}
-        area_sqm: {type: integer, minimum: 1}
-        room_option_id: {type: string}
-        cleaning_option_id: {type: string}
-        extra_option_ids: {type: array, items: {type: string}}
-    ServiceQuote:
-      type: object
-      properties:
-        quote_id: {type: string}
-        service_id: {type: string}
-        currency: {type: string, example: RUB}
-        area_sqm: {type: integer}
-        line_items: {type: array, items: {type: object}}
-        subtotal: {type: integer}
-        discount: {type: integer}
-        total_price: {type: integer}
-        expires_at: {type: string, format: date-time}
-    CreateQuotedOrderRequest:
-      type: object
-      required: [quote_id, address, scheduled_at]
-      properties:
-        quote_id: {type: string}
-        scheduled_at: {type: string, format: date-time}
+        room_option_id: {type: [string, 'null']}
+        cleaning_option_id: {type: [string, 'null']}
+        extra_option_ids: {type: array, uniqueItems: true, items: {type: string}}
+        scheduled_at: {type: string, format: date-time, description: "UTC is assumed when the ISO 8601 value has no offset."}
         payment_method: {type: ['null', string]}
-        address: {type: object}
+        address:
+          type: object
+          required: [full_address]
+          properties:
+            full_address: {type: string, minLength: 3, maxLength: 255}
+            entrance: {type: [string, 'null'], maxLength: 50}
+            floor: {type: [string, 'null'], maxLength: 50}
+            apartment: {type: [string, 'null'], maxLength: 50}
+            intercom: {type: [string, 'null'], maxLength: 50}
+            comment: {type: [string, 'null'], maxLength: 2000}
+    CreateOrderResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, status, status_label, scheduled_at, total_price, currency, service, created_at]
+          properties:
+            id: {type: string}
+            status: {type: string, enum: [processing]}
+            status_label: {type: string}
+            scheduled_at: {type: string, format: date-time}
+            total_price: {type: integer, minimum: 0}
+            currency: {type: string, enum: [RUB]}
+            service:
+              type: object
+              required: [id, title]
+              properties:
+                id: {type: string}
+                title: {type: string}
+    PaymentLinkResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, payment_url, expires_at, status]
+          properties:
+            id: {type: string, description: T-Bank merchant OrderId}
+            payment_url: {type: string, format: uri}
+            expires_at: {type: string, format: date-time}
+            status: {type: string, enum: [pending]}
+            created_at: {type: string, format: date-time}
     PhoneRequest:
       type: object
       required: [phone]
@@ -590,26 +680,14 @@ components:
           type: boolean
         email_marketing_enabled:
           type: boolean
-    CheckoutRequest:
+    PushTokenRequest:
       type: object
-      required: [cleaning_service_id, address]
+      required: [token]
       properties:
-        cleaning_service_id:
-          type: integer
-          minimum: 1
-        address:
+        token:
           type: string
-          maxLength: 255
-        scheduled_at:
-          type:
-            - string
-            - 'null'
-          format: date-time
-        comment:
-          type:
-            - string
-            - 'null'
-          maxLength: 2000
+          maxLength: 4096
+          description: Firebase Cloud Messaging registration token for the current device.
     MessageResponse:
       type: object
       required: [message]
@@ -716,6 +794,9 @@ components:
         base_price:
           type: integer
           minimum: 0
+        cleaner_base_earnings:
+          type: integer
+          minimum: 0
         is_active:
           type: boolean
         created_at:
@@ -732,15 +813,15 @@ components:
           type: integer
         client_id:
           type: integer
-        cleaner_id:
-          type:
-            - integer
-            - 'null'
+        cleaners:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
         cleaning_service_id:
           type: integer
         status:
           type: string
-          enum: [pending, accepted, in_progress, completed, cancelled]
+          enum: [processing, confirmed, team_formed, in_progress, awaiting_payment, completed, cancelled]
         address:
           type: string
         scheduled_at:
@@ -755,10 +836,41 @@ components:
         total_price:
           type: integer
           minimum: 0
+        cleaner_earnings:
+          type: integer
+          minimum: 0
+          description: Cleaner share in rubles. For available orders, the expected share after the current cleaner joins.
         service:
           oneOf:
             - $ref: '#/components/schemas/CleaningService'
             - type: 'null'
+    CleanerOrderDetail:
+      type: object
+      required: [id, status, status_label, scheduled_at, total_price, cleaner_earnings, currency, service, address, line_items, extra_options]
+      properties:
+        id: {type: string}
+        status: {type: string, enum: [processing, confirmed, team_formed, in_progress, awaiting_payment, completed, cancelled]}
+        status_label: {type: string}
+        scheduled_at: {type: string, format: date-time}
+        total_price: {type: integer}
+        cleaner_earnings: {type: integer, minimum: 0, description: "Cleaner share in rubles"}
+        currency: {type: string, enum: [RUB]}
+        service: {type: object}
+        address: {type: object}
+        line_items:
+          type: array
+          items: {$ref: '#/components/schemas/OrderLineItem'}
+        extra_options:
+          type: array
+          items: {$ref: '#/components/schemas/OrderLineItem'}
+    OrderLineItem:
+      type: object
+      required: [kind, title, amount]
+      properties:
+        kind: {type: string}
+        option_id: {type: [string, 'null']}
+        title: {type: string}
+        amount: {type: integer}
     ErrorResponse:
       type: object
       required: [message]

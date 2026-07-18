@@ -49,6 +49,7 @@ class ServiceCatalogSeeder extends Seeder
             'short_description' => $description,
             'long_description' => $description.' В стоимость включены все основные работы, а дополнительные услуги выбираются отдельно.',
             'cleaners_label' => $cleanersLabel,
+            'required_cleaners' => (int) str_replace(' клинера', '', str_replace(' клинер', '', $cleanersLabel)),
             'duration_label' => $durationLabel,
             'image_url' => "https://cdn.klinomania.ru/services/{$slug}/hero.jpg",
             'gallery' => [

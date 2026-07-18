@@ -10,6 +10,7 @@ use Filament\Panel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -35,6 +36,13 @@ class User extends Authenticatable implements FilamentUser
     public function cleanerProfile(): HasOne
     {
         return $this->hasOne(CleanerProfile::class);
+    }
+
+    public function cleaningOrders(): BelongsToMany
+    {
+        return $this->belongsToMany(CleaningOrder::class, 'cleaning_order_cleaners', 'cleaner_id', 'cleaning_order_id')
+            ->withPivot(['accepted_at', 'started_at', 'completed_at'])
+            ->withTimestamps();
     }
 
     /**

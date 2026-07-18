@@ -2,16 +2,16 @@
 
 namespace App\Modules\Services\Http\Controllers;
 
+use App\Enums\OrderStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\CleaningOrder;
 use App\Models\CleaningService;
-use App\Models\ServiceQuote;
 use App\Models\User;
-use App\Modules\Services\Actions\CalculateServiceQuote;
-use App\Modules\Services\Actions\CreateOrderFromQuote;
+use App\Modules\Orders\Actions\CreateOrder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class ClientServiceController extends Controller
 {
@@ -42,24 +42,28 @@ class ClientServiceController extends Controller
         return response()->json(['data' => $data]);
     }
 
-    public function quote(Request $request, CalculateServiceQuote $action): JsonResponse
-    {
-        $user = $this->ensureClient($request);
-        $input = $request->validate(['service_id' => ['required', 'string', 'max:100'], 'area_sqm' => ['required', 'integer', 'min:1'], 'room_option_id' => ['required', 'string', 'max:100'], 'cleaning_option_id' => ['required', 'string', 'max:100'], 'extra_option_ids' => ['sometimes', 'array'], 'extra_option_ids.*' => ['string', 'max:100']]);
-        $quote = $action->execute($user, $input);
-
-        return response()->json(['data' => $this->quoteResponse($quote)]);
-    }
-
-    public function createOrder(Request $request, CreateOrderFromQuote $action): JsonResponse
+    public function createOrder(Request $request, CreateOrder $action): JsonResponse
     {
         $user = $this->ensureClient($request);
         $key = $request->header('Idempotency-Key');
         if (! is_string($key) || ! preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $key)) {
             return response()->json(['message' => 'The Idempotency-Key header must be a UUID v4.', 'code' => 'validation_error', 'errors' => ['Idempotency-Key' => ['A UUID v4 is required.']]], 422);
         }
-        $input = $request->validate(['quote_id' => ['required', 'string'], 'scheduled_at' => ['required', 'date', 'after_or_equal:now', 'before_or_equal:'.now()->addYear()->toDateTimeString()], 'payment_method' => ['nullable'], 'address' => ['required', 'array'], 'address.full_address' => ['required', 'string', 'max:255'], 'address.fias_id' => ['nullable', 'string', 'max:255', 'required_without_all:address.latitude,address.longitude'], 'address.latitude' => ['nullable', 'numeric', 'required_with:address.longitude'], 'address.longitude' => ['nullable', 'numeric', 'required_with:address.latitude'], 'address.entrance' => ['nullable', 'string', 'max:50'], 'address.floor' => ['nullable', 'string', 'max:50'], 'address.apartment' => ['nullable', 'string', 'max:50'], 'address.intercom' => ['nullable', 'string', 'max:50'], 'address.comment' => ['nullable', 'string', 'max:2000']]);
-        $order = $action->execute($user, $key, $input);
+        try {
+            $input = $this->validatedOrderInput($request);
+            $selectedCodes = array_filter([$input['room_option_id'] ?? null, $input['cleaning_option_id'] ?? null, ...$input['extra_option_ids']]);
+            if (count($selectedCodes) !== count(array_unique($selectedCodes))) {
+                throw ValidationException::withMessages(['extra_option_ids' => ['Each option may only be selected once.']]);
+            }
+
+            $order = $action->execute($user, $key, $this->requestHash($input), $input);
+        } catch (ValidationException $exception) {
+            return response()->json([
+                'message' => 'The given data was invalid.',
+                'code' => 'validation_error',
+                'errors' => $exception->errors(),
+            ], 422);
+        }
 
         return response()->json(['data' => $this->orderResponse($order)], $order->wasRecentlyCreated ? 201 : 200);
     }
@@ -67,16 +71,24 @@ class ClientServiceController extends Controller
     public function homeSummary(Request $request): JsonResponse
     {
         $user = $this->ensureClient($request);
-        $orders = CleaningOrder::query()->where('client_id', $user->id)->whereIn('status', ['new', 'awaiting_cleaner', 'assigned', 'in_progress', 'pending', 'accepted'])->orderBy('scheduled_at')->get();
+        $orders = CleaningOrder::query()->where('client_id', $user->id)->whereIn('status', [OrderStatus::Processing, OrderStatus::Confirmed, OrderStatus::TeamFormed, OrderStatus::InProgress, OrderStatus::AwaitingPayment])->orderBy('scheduled_at')->get();
         $order = $orders->first();
-        $labels = ['new' => 'Новая', 'awaiting_cleaner' => 'Ожидание клинера', 'assigned' => 'Клинер назначен', 'in_progress' => 'В процессе', 'pending' => 'Ожидание клинера', 'accepted' => 'Клинер назначен'];
+        $labels = [
+            OrderStatus::Processing->value => 'В обработке',
+            OrderStatus::Confirmed->value => 'Подтверждена',
+            OrderStatus::TeamFormed->value => 'Команда сформирована',
+            OrderStatus::InProgress->value => 'В работе',
+            OrderStatus::AwaitingPayment->value => 'Ожидает оплаты',
+        ];
 
         return response()->json(['data' => ['active_orders_count' => $orders->count(), 'active_order_status' => $order?->status?->value, 'active_order_status_label' => $order === null ? null : $labels[$order->status->value]]]);
     }
 
     private function ensureClient(Request $request): User
     {
-        abort_unless($request->user()->role === UserRole::Client, 403);
+        if ($request->user()->role !== UserRole::Client) {
+            abort(response()->json(['message' => 'Forbidden.', 'code' => 'forbidden'], 403));
+        }
 
         return $request->user();
     }
@@ -91,13 +103,82 @@ class ClientServiceController extends Controller
         return ['id' => $option->code, 'title' => $option->title, 'subtitle' => $option->subtitle, 'is_addon' => $option->is_addon, 'default' => $option->is_default, 'price_modifier' => $option->price_modifier, 'sort_order' => $option->sort_order];
     }
 
-    private function quoteResponse(ServiceQuote $quote): array
+    /** @return array<string, mixed> */
+    private function validatedOrderInput(Request $request): array
     {
-        return ['quote_id' => $quote->id, 'service_id' => $quote->configuration['service_id'], 'currency' => $quote->currency, 'area_sqm' => $quote->configuration['area_sqm'], 'line_items' => $quote->line_items, 'subtotal' => array_sum(array_column($quote->line_items, 'amount')), 'discount' => 0, 'total_price' => $quote->total_price, 'expires_at' => $quote->expires_at];
+        $payload = $request->all();
+        if (array_key_exists('comment', $payload) && is_array($payload['address'] ?? null) && ! array_key_exists('comment', $payload['address'])) {
+            $payload['address']['comment'] = $payload['comment'];
+            unset($payload['comment']);
+        }
+        foreach (['room_option_id', 'cleaning_option_id', 'payment_method'] as $field) {
+            if (array_key_exists($field, $payload)) {
+                $payload[$field] = $this->nullableTrimmedString($payload[$field]);
+            }
+        }
+        foreach (['entrance', 'floor', 'apartment', 'intercom', 'comment'] as $field) {
+            if (array_key_exists($field, $payload['address'] ?? [])) {
+                $payload['address'][$field] = $this->nullableTrimmedString($payload['address'][$field]);
+            }
+        }
+        if (array_key_exists('full_address', $payload['address'] ?? [])) {
+            $payload['address']['full_address'] = is_string($payload['address']['full_address']) ? trim($payload['address']['full_address']) : $payload['address']['full_address'];
+        }
+        if (is_string($payload['scheduled_at'] ?? null)
+            && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/', $payload['scheduled_at'])) {
+            $payload['scheduled_at'] .= 'Z';
+        }
+        $request->replace($payload);
+
+        return $request->validate([
+            'service_id' => ['required', 'string', 'max:100'],
+            'room_option_id' => ['nullable', 'string', 'max:100'],
+            'cleaning_option_id' => ['nullable', 'string', 'max:100'],
+            'extra_option_ids' => ['present', 'array'],
+            'extra_option_ids.*' => ['string', 'max:100', 'distinct:strict'],
+            'scheduled_at' => ['required', 'string', 'regex:/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/', 'date', 'after_or_equal:now', 'before_or_equal:'.now()->addYear()->toDateTimeString()],
+            'payment_method' => ['nullable', 'string', 'max:50'],
+            'address' => ['required', 'array'],
+            'address.full_address' => ['required', 'string', 'min:3', 'max:255'],
+            'address.entrance' => ['nullable', 'string', 'max:50'],
+            'address.floor' => ['nullable', 'string', 'max:50'],
+            'address.apartment' => ['nullable', 'string', 'max:50'],
+            'address.intercom' => ['nullable', 'string', 'max:50'],
+            'address.comment' => ['nullable', 'string', 'max:2000'],
+        ]);
+    }
+
+    private function nullableTrimmedString(mixed $value): mixed
+    {
+        if (! is_string($value)) {
+            return $value;
+        }
+
+        $value = trim($value);
+
+        return $value === '' ? null : $value;
+    }
+
+    /** @param array<string, mixed> $input */
+    private function requestHash(array $input): string
+    {
+        $canonicalize = function (mixed $value) use (&$canonicalize): mixed {
+            if (! is_array($value)) {
+                return $value;
+            }
+            if (array_is_list($value)) {
+                return array_map($canonicalize, $value);
+            }
+            ksort($value);
+
+            return array_map($canonicalize, $value);
+        };
+
+        return hash('sha256', json_encode($canonicalize($input), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
     }
 
     private function orderResponse(CleaningOrder $order): array
     {
-        return ['id' => $order->public_id, 'status' => $order->status->value, 'status_label' => 'Ожидание клинера', 'scheduled_at' => $order->scheduled_at, 'total_price' => $order->total_price, 'currency' => $order->currency, 'service' => $order->service_snapshot, 'created_at' => $order->created_at];
+        return ['id' => $order->public_id, 'status' => $order->status->value, 'status_label' => 'В обработке', 'scheduled_at' => $order->scheduled_at, 'total_price' => $order->total_price, 'currency' => $order->currency, 'service' => $order->service_snapshot, 'created_at' => $order->created_at];
     }
 }

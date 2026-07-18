@@ -41,4 +41,12 @@ return [
         'api_key' => env('NOTISEND_API_KEY', env('NOTISEND_TOKEN')),
     ],
 
+    'tbank' => [
+        'base_url' => env('TBANK_API_URL', 'https://securepay.tinkoff.ru'),
+        'terminal_key' => env('TBANK_TERMINAL_KEY'),
+        'password' => env('TBANK_PASSWORD'),
+        'notification_url' => env('TBANK_NOTIFICATION_URL', rtrim((string) env('APP_URL', 'http://localhost'), '/').'/api/v1/payments/tbank/notifications'),
+        'link_ttl_minutes' => (int) env('TBANK_LINK_TTL_MINUTES', 1440),
+    ],
+
 ];
