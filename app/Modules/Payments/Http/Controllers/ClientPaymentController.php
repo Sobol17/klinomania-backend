@@ -9,6 +9,7 @@ use App\Modules\Payments\Actions\CreateTBankPayment;
 use App\Modules\Payments\Exceptions\TBankGatewayException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class ClientPaymentController extends Controller
 {
@@ -20,6 +21,14 @@ class ClientPaymentController extends Controller
         try {
             $payment = $payments->execute($order);
         } catch (TBankGatewayException $exception) {
+            Log::error('Payment initialization failed.', [
+                'order_public_id' => $order->public_id,
+                'order_id' => $order->id,
+                'amount' => $order->total_price,
+                'currency' => $order->currency,
+                'exception' => $exception,
+            ]);
+
             return response()->json(['message' => 'Unable to initialize payment.', 'code' => 'payment_provider_unavailable'], 502);
         }
 

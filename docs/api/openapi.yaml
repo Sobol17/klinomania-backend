@@ -355,7 +355,7 @@ paths:
   /cleaner/orders/{order}:
     get:
       tags: [Cleaner Orders]
-      summary: Get an assigned order with selected extra services
+      summary: Get a confirmed available order or an assigned order with its checklist and selected extra services
       security:
         - bearerAuth: []
       parameters:
@@ -376,6 +376,40 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /cleaner/orders/{order}/checklist/{item}:
+    patch:
+      tags: [Cleaner Orders]
+      summary: Mark a base or selected extra-service checklist item as completed or incomplete
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - name: item
+          in: path
+          required: true
+          schema: {type: string, description: "Base checklist item ID or extra-{orderLineItemId} for a selected extra service."}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [completed]
+              properties:
+                completed: {type: boolean}
+      responses:
+        '200':
+          description: Updated shared checklist item
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: {$ref: '#/components/schemas/CleanerChecklistItem'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/ValidationError'}
   /cleaner/orders/{order}/accept:
     post:
       tags: [Cleaner Orders]
@@ -571,6 +605,8 @@ components:
           properties:
             description: {type: [string, 'null']}
             pricing: {type: object}
+            checklist: {type: array, items: {$ref: '#/components/schemas/ServiceChecklistItem'}}
+            checklist_sections: {type: array, items: {$ref: '#/components/schemas/ClientChecklistSection'}}
             room_options: {type: array, items: {$ref: '#/components/schemas/ServiceOption'}}
             cleaning_options: {type: array, items: {$ref: '#/components/schemas/ServiceOption'}}
             extra_options: {type: array, items: {$ref: '#/components/schemas/ServiceOption'}}
@@ -846,7 +882,7 @@ components:
             - type: 'null'
     CleanerOrderDetail:
       type: object
-      required: [id, status, status_label, scheduled_at, total_price, cleaner_earnings, currency, service, address, line_items, extra_options]
+      required: [id, status, status_label, scheduled_at, total_price, cleaner_earnings, currency, service, address, line_items, extra_options, checklist]
       properties:
         id: {type: string}
         status: {type: string, enum: [processing, confirmed, team_formed, in_progress, awaiting_payment, completed, cancelled]}
@@ -863,6 +899,48 @@ components:
         extra_options:
           type: array
           items: {$ref: '#/components/schemas/OrderLineItem'}
+        checklist:
+          type: array
+          items: {$ref: '#/components/schemas/CleanerChecklistItem'}
+        checklist_sections:
+          type: array
+          items: {$ref: '#/components/schemas/CleanerChecklistSection'}
+    ServiceChecklistItem:
+      type: object
+      required: [id, zone, title, sort_order]
+      properties:
+        id: {type: integer}
+        zone: {type: string, enum: [all, rooms, kitchen, bathroom]}
+        title: {type: string}
+        sort_order: {type: integer}
+    ClientChecklistSection:
+      type: object
+      required: [id, title, items]
+      properties:
+        id: {type: string, enum: [all, rooms, kitchen, bathroom]}
+        title: {type: string}
+        items: {type: array, items: {$ref: '#/components/schemas/ServiceChecklistItem'}}
+    CleanerChecklistItem:
+      type: object
+      required: [id, kind, zone, title, sort_order, completed, completed_at]
+      properties:
+        id:
+          oneOf:
+            - type: integer
+            - type: string
+        kind: {type: string, enum: [base_service, extra_service]}
+        zone: {type: string, enum: [all, rooms, kitchen, bathroom]}
+        title: {type: string}
+        sort_order: {type: integer}
+        completed: {type: boolean}
+        completed_at: {type: [string, 'null'], format: date-time}
+    CleanerChecklistSection:
+      type: object
+      required: [id, title, items]
+      properties:
+        id: {type: string, enum: [all, rooms, kitchen, bathroom]}
+        title: {type: string}
+        items: {type: array, items: {$ref: '#/components/schemas/CleanerChecklistItem'}}
     OrderLineItem:
       type: object
       required: [kind, title, amount]

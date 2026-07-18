@@ -29,6 +29,9 @@ test('a moderator confirms an order and cleaners form and complete its team', fu
 
     Sanctum::actingAs($firstCleaner);
     $this->getJson('/api/v1/cleaner/orders/available')->assertOk()->assertJsonCount(1, 'data');
+    $this->getJson("/api/v1/cleaner/orders/{$order->public_id}")
+        ->assertOk()
+        ->assertJsonPath('data.status', 'confirmed');
     $this->postJson("/api/v1/cleaner/orders/{$order->public_id}/accept")
         ->assertOk()->assertJsonPath('data.status', 'confirmed');
 
@@ -45,6 +48,10 @@ test('a moderator confirms an order and cleaners form and complete its team', fu
         ->assertJsonPath('data.extra_options.0.option_id', 'fridge-inside')
         ->assertJsonPath('data.extra_options.0.title', 'Холодильник внутри');
     $this->getJson('/api/v1/cleaner/orders')->assertOk()->assertJsonCount(1, 'data');
+    $extraLineItem = $order->lineItems()->where('kind', 'extra_option')->sole();
+    $this->patchJson("/api/v1/cleaner/orders/{$order->public_id}/checklist/extra-{$extraLineItem->id}", ['completed' => true])
+        ->assertOk()
+        ->assertJsonPath('data.kind', 'extra_service');
 
     $this->postJson("/api/v1/cleaner/orders/{$order->public_id}/start")
         ->assertOk()->assertJsonPath('data.status', 'in_progress');

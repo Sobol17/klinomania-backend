@@ -98,6 +98,19 @@ class OrderWorkflow
             if ($member === null || $member->pivot->started_at === null) {
                 $this->conflict('Only a cleaner who started the order can complete it.');
             }
+            if ($order->service->checklistItems()
+                ->whereDoesntHave('orderChecklistItems', fn ($query) => $query
+                    ->where('cleaning_order_id', $order->id)
+                    ->whereNotNull('completed_at'))
+                ->exists()) {
+                $this->checklistIncomplete();
+            }
+            if ($order->lineItems()
+                ->where('kind', 'extra_option')
+                ->whereDoesntHave('extraChecklistItem', fn ($query) => $query->whereNotNull('completed_at'))
+                ->exists()) {
+                $this->checklistIncomplete();
+            }
 
             $order->cleaners()->updateExistingPivot($cleaner->id, ['completed_at' => now()]);
             $order->forceFill(['status' => OrderStatus::AwaitingPayment])->save();
@@ -141,6 +154,11 @@ class OrderWorkflow
     private function conflict(string $message): never
     {
         abort(response()->json(['message' => $message, 'code' => 'invalid_order_transition'], 409));
+    }
+
+    private function checklistIncomplete(): never
+    {
+        abort(response()->json(['message' => 'All checklist items must be completed before finishing the order.', 'code' => 'checklist_incomplete'], 409));
     }
 
     private function statusChanged(CleaningOrder $order): void

@@ -37,6 +37,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('cleaner/orders/available', [CleanerOrderController::class, 'available']);
         Route::get('cleaner/orders/history', [CleanerOrderController::class, 'history']);
         Route::get('cleaner/orders/{order}', [CleanerOrderController::class, 'show']);
+        Route::patch('cleaner/orders/{order}/checklist/{item}', [CleanerOrderController::class, 'updateChecklistItem']);
         Route::post('cleaner/orders/{order}/accept', [CleanerOrderController::class, 'accept']);
         Route::post('cleaner/orders/{order}/start', [CleanerOrderController::class, 'start']);
         Route::post('cleaner/orders/{order}/complete', [CleanerOrderController::class, 'complete']);

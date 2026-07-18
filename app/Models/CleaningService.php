@@ -21,4 +21,9 @@ class CleaningService extends Model
     {
         return $this->hasMany(ServiceOption::class);
     }
+
+    public function checklistItems(): HasMany
+    {
+        return $this->hasMany(ServiceChecklistItem::class)->orderBy('sort_order');
+    }
 }

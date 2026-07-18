@@ -49,6 +49,16 @@ class CleaningOrder extends Model
         return $this->hasMany(OrderLineItem::class);
     }
 
+    public function checklistItems(): HasMany
+    {
+        return $this->hasMany(OrderChecklistItem::class);
+    }
+
+    public function extraChecklistItems(): HasMany
+    {
+        return $this->hasMany(OrderExtraChecklistItem::class);
+    }
+
     public function paymentAttempts(): HasMany
     {
         return $this->hasMany(PaymentAttempt::class);

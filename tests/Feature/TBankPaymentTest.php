@@ -7,8 +7,10 @@ use App\Models\CleaningService;
 use App\Models\PaymentAttempt;
 use App\Models\User;
 use App\Modules\Payments\Contracts\TBankGateway;
+use App\Modules\Payments\Exceptions\TBankGatewayException;
 use App\Modules\Payments\Support\TBankToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 
@@ -41,6 +43,29 @@ test('client receives a reusable T-Bank payment URL only for their awaiting-paym
 
     expect(PaymentAttempt::query()->count())->toBe(1)
         ->and(PaymentAttempt::query()->sole()->amount)->toBe(770000);
+});
+
+test('payment provider failure is logged with order context', function () {
+    [$client, $order] = awaitingPaymentOrder();
+    app()->bind(TBankGateway::class, fn () => new class implements TBankGateway
+    {
+        public function initialize(PaymentAttempt $attempt, string $description): array
+        {
+            throw new TBankGatewayException('Provider returned error code 7.');
+        }
+    });
+    Log::spy();
+    Sanctum::actingAs($client);
+
+    $this->postJson("/api/v1/client/orders/{$order->public_id}/payment")
+        ->assertStatus(502)
+        ->assertJsonPath('code', 'payment_provider_unavailable');
+
+    Log::shouldHaveReceived('error')
+        ->once()
+        ->withArgs(fn (string $message, array $context): bool => $message === 'Payment initialization failed.'
+            && $context['order_public_id'] === $order->public_id
+            && $context['exception'] instanceof TBankGatewayException);
 });
 
 test('confirmed signed notification completes the matching order exactly once', function () {

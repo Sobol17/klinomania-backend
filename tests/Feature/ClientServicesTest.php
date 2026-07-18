@@ -75,7 +75,7 @@ test('order accepts an ISO date-time without an explicit offset as UTC', functio
         ->postJson('/api/v1/client/orders', [
             'service_id' => 'standard',
             'extra_option_ids' => [],
-            'scheduled_at' => '2026-07-18T11:00:00.000',
+            'scheduled_at' => now()->addDay()->format('Y-m-d\\TH:i:s.v'),
             'address' => ['full_address' => 'Кировская область, деревня Москва, 5'],
             'comment' => 'Тест',
         ])

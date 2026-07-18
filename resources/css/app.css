@@ -7,3 +7,23 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
+
+@layer components {
+    .service-checklist-repeater {
+        max-height: min(30rem, 58vh);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+    }
+
+    .service-checklist-repeater .fi-fo-table-repeater-add {
+        position: sticky;
+        bottom: 0;
+        padding: 0.75rem 0 0.25rem;
+        background: var(--color-gray-50);
+    }
+
+    .dark .service-checklist-repeater .fi-fo-table-repeater-add {
+        background: var(--color-gray-950);
+    }
+}

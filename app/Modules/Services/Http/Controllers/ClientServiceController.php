@@ -2,6 +2,7 @@
 
 namespace App\Modules\Services\Http\Controllers;
 
+use App\Enums\ChecklistZone;
 use App\Enums\OrderStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
@@ -11,6 +12,7 @@ use App\Models\User;
 use App\Modules\Orders\Actions\CreateOrder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 
 class ClientServiceController extends Controller
@@ -31,9 +33,12 @@ class ClientServiceController extends Controller
             return response()->json(['message' => 'Service not found.', 'code' => 'service_not_found'], 404);
         }
         $options = $service->options()->where('is_active', true)->orderBy('sort_order')->get();
+        $checklist = $service->checklistItems()->get()->map(fn ($item) => $this->checklistItem($item))->values();
         $data = $this->serviceCard($service) + [
             'description' => $service->long_description ?? $service->description,
             'pricing' => ['base_price' => $service->base_price, 'price_per_sqm' => $service->price_per_sqm, 'min_area' => $service->min_area, 'max_area' => $service->max_area, 'area_step' => $service->area_step, 'min_price' => $service->min_price, 'currency' => $service->currency],
+            'checklist' => $checklist,
+            'checklist_sections' => $this->checklistSections($checklist),
             'room_options' => $options->where('group', 'room')->map(fn ($option) => $this->option($option))->values(),
             'cleaning_options' => $options->where('group', 'cleaning')->map(fn ($option) => $this->option($option))->values(),
             'extra_options' => $options->where('group', 'extra')->map(fn ($option) => $this->option($option))->values(),
@@ -101,6 +106,21 @@ class ClientServiceController extends Controller
     private function option($option): array
     {
         return ['id' => $option->code, 'title' => $option->title, 'subtitle' => $option->subtitle, 'is_addon' => $option->is_addon, 'default' => $option->is_default, 'price_modifier' => $option->price_modifier, 'sort_order' => $option->sort_order];
+    }
+
+    private function checklistItem($item): array
+    {
+        return ['id' => $item->id, 'zone' => $item->zone->value, 'title' => $item->title, 'sort_order' => $item->sort_order];
+    }
+
+    /** @param Collection<int, array<string, mixed>> $checklist */
+    private function checklistSections(Collection $checklist): array
+    {
+        return array_map(fn (ChecklistZone $zone): array => [
+            'id' => $zone->value,
+            'title' => $zone->label(),
+            'items' => $checklist->where('zone', $zone->value)->values(),
+        ], ChecklistZone::cases());
     }
 
     /** @return array<string, mixed> */

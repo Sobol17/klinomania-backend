@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ExtraServices;
 
+use App\Enums\ChecklistZone;
 use App\Filament\Resources\ExtraServices\Pages\CreateExtraService;
 use App\Filament\Resources\ExtraServices\Pages\EditExtraService;
 use App\Filament\Resources\ExtraServices\Pages\ListExtraServices;
@@ -41,6 +42,7 @@ class ExtraServiceResource extends Resource
             Hidden::make('group')->default('extra'),
             Hidden::make('is_addon')->default(true),
             Select::make('cleaning_service_id')->label('Основная услуга')->relationship('service', 'name')->required(),
+            Select::make('checklist_zone')->label('Зона чеклиста')->options(collect(ChecklistZone::cases())->mapWithKeys(fn (ChecklistZone $zone) => [$zone->value => $zone->label()]))->required()->default(ChecklistZone::Everywhere->value),
             TextInput::make('code')->label('Код')->required()->maxLength(255),
             TextInput::make('title')->label('Название')->required()->maxLength(255),
             TextInput::make('price_modifier')->label('Цена')->required()->integer()->minValue(0),
