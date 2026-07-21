@@ -7,8 +7,8 @@ RUN apt-get update \
         libxml2-dev \
         libzip-dev \
         unzip \
+    && docker-php-ext-install -j"$(nproc)" dom \
     && docker-php-ext-install -j"$(nproc)" \
-        dom \
         intl \
         opcache \
         pcntl \
