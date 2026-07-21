@@ -2,7 +2,10 @@
 
 Первый production-деплой рассчитан на VPS + Docker Compose.
 
-Подробный пошаговый гайд: [Docker deploy guide](docker-deploy.md).
+Пошаговые инструкции:
+
+1. [Подготовка чистого VPS](vps-setup.md).
+2. [Docker deploy guide](docker-deploy.md).
 
 ## Подготовка
 
