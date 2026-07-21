@@ -1,75 +1,51 @@
-FROM php:8.3-fpm-bookworm AS php-base
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        libicu-dev \
-        libpq-dev \
-        libxml2-dev \
-        libzip-dev \
-        unzip \
-    && docker-php-ext-install -j"$(nproc)" dom \
-    && docker-php-ext-install -j"$(nproc)" \
-        intl \
-        opcache \
-        pcntl \
-        pdo_pgsql \
-        xmlreader \
-        zip \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-COPY docker/php/production.ini /usr/local/etc/php/conf.d/production.ini
+FROM php:8.4-fpm-alpine AS base
 
 WORKDIR /var/www/html
 
-FROM node:22-bookworm-slim AS assets
+RUN apk add --no-cache \
+    bash \
+    curl \
+    icu-dev \
+    libzip-dev \
+    oniguruma-dev \
+    postgresql-dev \
+    zip \
+    unzip \
+    && docker-php-ext-install intl mbstring opcache pdo pdo_pgsql zip
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+FROM node:22-alpine AS assets
 
 WORKDIR /app
 
 COPY package.json package-lock.json .npmrc ./
-RUN npm ci --ignore-scripts
+RUN npm ci
 
 COPY resources ./resources
 COPY vite.config.js ./
 RUN npm run build
 
-FROM php-base AS app
+FROM base AS app
 
 COPY composer.json composer.lock ./
-RUN composer install \
-    --no-dev \
-    --no-interaction \
-    --no-progress \
-    --no-scripts \
-    --prefer-dist
+RUN composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader --no-scripts
 
-COPY --chown=www-data:www-data . .
-COPY --from=assets --chown=www-data:www-data /app/public/build ./public/build
+COPY . .
+COPY --from=assets /app/public/build ./public/build
 
-RUN composer dump-autoload --no-dev --classmap-authoritative --no-scripts \
-    && php artisan package:discover --ansi \
-    && php artisan filament:upgrade \
-    && mkdir -p \
-        storage/app/public \
-        storage/framework/cache/data \
-        storage/framework/sessions \
-        storage/framework/views \
-        storage/logs \
-        bootstrap/cache \
-    && ln -sfn ../storage/app/public public/storage \
+RUN composer dump-autoload --optimize \
+    && mkdir -p storage/app/public storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 
 USER www-data
 
-EXPOSE 9000
-
 CMD ["php-fpm"]
 
-FROM nginx:1.27-alpine AS web
-
-WORKDIR /var/www/html
+FROM nginx:1.27-alpine AS nginx
 
 COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
-COPY --from=app /var/www/html/public ./public
+COPY --from=app /var/www/html/public /var/www/html/public
 
-EXPOSE 80
+RUN rm -rf /var/www/html/public/storage \
+    && ln -s /var/www/html/storage/app/public /var/www/html/public/storage

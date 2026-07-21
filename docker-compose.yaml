@@ -39,7 +39,7 @@ services:
     image: klinomania-backend-web:latest
     build:
       context: .
-      target: web
+      target: nginx
     restart: unless-stopped
     depends_on:
       app:
