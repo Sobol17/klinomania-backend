@@ -1,8 +1,5 @@
 x-php-service: &php-service
   image: klinomania-backend-app:latest
-  build:
-    context: .
-    target: app
   env_file:
     - .env
   environment: &php-environment
@@ -28,6 +25,9 @@ x-php-service: &php-service
 services:
   app:
     <<: *php-service
+    build:
+      context: .
+      target: app
     healthcheck:
       test: ["CMD", "php-fpm", "-t"]
       interval: 10s

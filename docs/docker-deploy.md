@@ -242,6 +242,30 @@ docker compose exec app php artisan schedule:list
 docker compose exec app php artisan queue:retry all
 ```
 
+### Docker Hub отвечает `429 Too Many Requests`
+
+Ошибка вида:
+
+```text
+failed to resolve source metadata for docker.io/library/php:8.3-fpm-bookworm:
+unexpected status ... 429 Too Many Requests
+```
+
+возникает до выполнения инструкций Dockerfile: Docker Hub ограничил запросы с IP сервера. Это не означает, что тег PHP отсутствует. Авторизуйтесь на VPS в Docker Hub, используя логин и access token вместо пароля:
+
+```bash
+docker login -u <docker-hub-username>
+```
+
+После успешного `Login Succeeded` повторите сборку с одним параллельным заданием:
+
+```bash
+docker compose --parallel 1 build
+docker compose up -d
+```
+
+Если Docker Hub по-прежнему возвращает короткий `429`, сработал общий anti-abuse limit для IP. Подождите указанный в ответе `Retry-After` интервал и повторите команду. Не используйте `--pull` и `--no-cache` при таком повторе: они создают лишние обращения и не исправляют ограничение registry.
+
 ## 7. Резервное копирование PostgreSQL
 
 Создание дампа на хосте:
