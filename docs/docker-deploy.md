@@ -79,23 +79,20 @@ TBANK_NOTIFICATION_URL=${APP_URL}/api/v1/payments/tbank/notifications
 
 Сгенерируйте надежные пароли любым доступным password manager. `.env` и Firebase service-account JSON нельзя коммитить.
 
-Для Firebase положите JSON на VPS, например в `/var/www/klinomania-secrets/firebase.json`, и создайте рядом с compose-файлом `docker-compose.override.yaml`:
+`docker-compose.yaml` монтирует Firebase service-account JSON из
+`/var/www/klinomania-secrets/firebase.json` в PHP-контейнеры как
+`/run/secrets/firebase.json:ro` и задаёт `FIREBASE_CREDENTIALS_PATH`
+автоматически. Ограничьте доступ к файлу на VPS:
 
-```yaml
-services:
-  app:
-    environment:
-      FIREBASE_CREDENTIALS_PATH: /run/secrets/firebase.json
-    volumes:
-      - /var/www/klinomania-secrets/firebase.json:/run/secrets/firebase.json:ro
-  queue:
-    environment:
-      FIREBASE_CREDENTIALS_PATH: /run/secrets/firebase.json
-    volumes:
-      - /var/www/klinomania-secrets/firebase.json:/run/secrets/firebase.json:ro
+```bash
+chmod 600 /var/www/klinomania-secrets/firebase.json
 ```
 
-Compose объединяет override с основным файлом. Указанные bind mounts добавятся к volume `app_storage`.
+Если файл хранится в другом месте, укажите абсолютный host path в `.env`:
+
+```dotenv
+FIREBASE_CREDENTIALS_HOST_PATH=/absolute/path/to/firebase.json
+```
 
 ## 3. Сборка и первый запуск
 
