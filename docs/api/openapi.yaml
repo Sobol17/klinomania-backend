@@ -284,6 +284,27 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
         '422': {$ref: '#/components/responses/ValidationError'}
         '429': {description: Order creation rate limit exceeded}
+  /client/orders/{order}:
+    get:
+      tags: [Client Orders]
+      summary: Get the current client's order details
+      description: Returns the order with its service, assigned cleaners, address snapshot, and price line items. The order path parameter is its public ULID.
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Client order detail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: {$ref: '#/components/schemas/ClientOrderDetail'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /client/push-token:
     post:
       tags: [Push Notifications]
@@ -880,6 +901,43 @@ components:
           oneOf:
             - $ref: '#/components/schemas/CleaningService'
             - type: 'null'
+    ClientOrderDetail:
+      type: object
+      required: [id, status, status_label, scheduled_at, total_price, currency, service, address, line_items, extra_options, cleaners, created_at]
+      properties:
+        id: {type: string, description: Public order ULID}
+        status: {type: string, enum: [processing, confirmed, team_formed, in_progress, awaiting_payment, completed, cancelled]}
+        status_label: {type: string}
+        scheduled_at: {type: string, format: date-time}
+        total_price: {type: integer, minimum: 0}
+        currency: {type: string, enum: [RUB]}
+        service: {type: object}
+        address: {$ref: '#/components/schemas/OrderAddress'}
+        line_items:
+          type: array
+          items: {$ref: '#/components/schemas/OrderLineItem'}
+        extra_options:
+          type: array
+          items: {$ref: '#/components/schemas/OrderLineItem'}
+        cleaners:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: {type: integer}
+              name: {type: [string, 'null']}
+        created_at: {type: string, format: date-time}
+    OrderAddress:
+      type: object
+      required: [full_address]
+      properties:
+        full_address: {type: string}
+        entrance: {type: [string, 'null']}
+        floor: {type: [string, 'null']}
+        apartment: {type: [string, 'null']}
+        intercom: {type: [string, 'null']}
+        comment: {type: [string, 'null']}
     CleanerOrderDetail:
       type: object
       required: [id, status, status_label, scheduled_at, total_price, cleaner_earnings, currency, service, address, line_items, extra_options, checklist]

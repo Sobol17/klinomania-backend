@@ -15,6 +15,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Kreait\Firebase\Contract\Messaging;
+use Kreait\Firebase\Factory;
+use RuntimeException;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -24,7 +27,18 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(SmsGateway::class, NotisendSmsGateway::class);
-        $this->app->bind(PushGateway::class, fn (): FirebasePushGateway => new FirebasePushGateway(config('firebase.credentials_path')));
+        $this->app->singleton(Messaging::class, function (): Messaging {
+            $credentialsPath = config('firebase.credentials_path');
+
+            if (! is_string($credentialsPath) || $credentialsPath === '' || ! is_file($credentialsPath)) {
+                throw new RuntimeException('Firebase service-account credentials are not configured.');
+            }
+
+            return (new Factory)
+                ->withServiceAccount($credentialsPath)
+                ->createMessaging();
+        });
+        $this->app->bind(PushGateway::class, FirebasePushGateway::class);
         $this->app->bind(TBankGateway::class, HttpTBankGateway::class);
     }
 

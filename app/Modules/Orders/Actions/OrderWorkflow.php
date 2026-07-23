@@ -125,7 +125,7 @@ class OrderWorkflow
 
     public function cancel(CleaningOrder $order, User $client): CleaningOrder
     {
-        return DB::transaction(function () use ($order, $client): CleaningOrder {
+        $order = DB::transaction(function () use ($order, $client): CleaningOrder {
             $order = $this->lockedOrder($order);
             if ($order->client_id !== $client->id) {
                 abort(response()->json(['message' => 'Forbidden.', 'code' => 'forbidden'], 403));
@@ -137,6 +137,10 @@ class OrderWorkflow
 
             return $order;
         });
+
+        $this->statusChanged($order);
+
+        return $order;
     }
 
     private function lockedOrder(CleaningOrder $order): CleaningOrder

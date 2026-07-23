@@ -7,10 +7,16 @@ use App\Models\CleaningService;
 use App\Models\User;
 use App\Modules\Notifications\Contracts\PushGateway;
 use App\Modules\Notifications\Events\OrderStatusChanged;
+use App\Modules\Notifications\Gateways\FirebasePushGateway;
 use App\Modules\Notifications\Listeners\SendOrderStatusPush;
+use App\Modules\Notifications\Services\OrderStatusPushService;
 use App\Modules\Orders\Actions\OrderWorkflow;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Kreait\Firebase\Contract\Messaging;
+use Kreait\Firebase\Exception\Messaging\NotFound;
+use Kreait\Firebase\Exception\Messaging\ServerUnavailable;
+use Kreait\Firebase\Messaging\CloudMessage;
 use Laravel\Sanctum\Sanctum;
 
 uses(RefreshDatabase::class);
@@ -49,7 +55,7 @@ test('a push token is required', function () {
     $this->postJson('/api/v1/client/push-token', [])->assertUnprocessable()->assertJsonValidationErrors('token');
 });
 
-test('server status changes publish a push event while client cancellation does not', function () {
+test('status changes including client cancellation publish a push event', function () {
     Event::fake([OrderStatusChanged::class]);
     [$client, $order] = orderForPushTests(OrderStatus::Processing);
 
@@ -58,11 +64,38 @@ test('server status changes publish a push event while client cancellation does 
     Event::assertDispatched(OrderStatusChanged::class, fn (OrderStatusChanged $event): bool => $event->orderId === $order->id && $event->status === OrderStatus::Confirmed);
     Event::fake([OrderStatusChanged::class]);
     app(OrderWorkflow::class)->cancel($order->refresh(), $client);
-    Event::assertNotDispatched(OrderStatusChanged::class);
+    Event::assertDispatched(OrderStatusChanged::class, fn (OrderStatusChanged $event): bool => $event->orderId === $order->id && $event->status === OrderStatus::Cancelled);
 });
 
-test('the status push includes the public order id and respects client preferences', function () {
-    [$client, $order] = orderForPushTests(OrderStatus::Confirmed);
+test('order workflow publishes every server-driven status transition', function () {
+    Event::fake([OrderStatusChanged::class]);
+    [$client, $order] = orderForPushTests(OrderStatus::Processing);
+    $firstCleaner = User::factory()->create(['role' => UserRole::Cleaner]);
+    $secondCleaner = User::factory()->create(['role' => UserRole::Cleaner]);
+    $order->service->forceFill(['required_cleaners' => 2])->save();
+    $workflow = app(OrderWorkflow::class);
+
+    $workflow->confirm($order);
+    $workflow->accept($order->refresh(), $firstCleaner);
+    $workflow->accept($order->refresh(), $secondCleaner);
+    $workflow->start($order->refresh(), $firstCleaner);
+    $workflow->complete($order->refresh(), $firstCleaner);
+
+    foreach ([
+        OrderStatus::Confirmed,
+        OrderStatus::TeamFormed,
+        OrderStatus::InProgress,
+        OrderStatus::AwaitingPayment,
+    ] as $status) {
+        Event::assertDispatched(
+            OrderStatusChanged::class,
+            fn (OrderStatusChanged $event): bool => $event->orderId === $order->id && $event->status === $status,
+        );
+    }
+});
+
+test('the status push includes the public order id only in data and a friendly status message', function (OrderStatus $status, string $message) {
+    [$client, $order] = orderForPushTests($status);
     $client->clientProfile()->create(['push_notifications_enabled' => true, 'fcm_token' => 'token']);
     $gateway = new class implements PushGateway
     {
@@ -76,19 +109,116 @@ test('the status push includes the public order id and respects client preferenc
     };
     app()->instance(PushGateway::class, $gateway);
 
-    app(SendOrderStatusPush::class)->handle(new OrderStatusChanged($order->id, OrderStatus::Confirmed));
+    app(SendOrderStatusPush::class)->handle(new OrderStatusChanged($order->id, $status));
 
     expect($gateway->sent)->toBe([
         'token' => 'token',
-        'title' => 'Статус заявки изменён',
-        'body' => "Заявка {$order->public_id}: Подтверждена",
+        'title' => 'Клиномания',
+        'body' => $message,
         'data' => ['order_id' => $order->public_id],
     ]);
+})->with([
+    'confirmed' => [OrderStatus::Confirmed, 'Ваша заявка на уборку подтверждена!'],
+    'team formed' => [OrderStatus::TeamFormed, 'Команда клинеров для вашей уборки сформирована!'],
+    'in progress' => [OrderStatus::InProgress, 'Клинеры приступили к вашей уборке.'],
+    'awaiting payment' => [OrderStatus::AwaitingPayment, 'Уборка завершена! Осталось оплатить заказ.'],
+    'completed' => [OrderStatus::Completed, 'Спасибо! Оплата получена, заявка завершена.'],
+    'cancelled' => [OrderStatus::Cancelled, 'Ваша заявка на уборку отменена.'],
+]);
+
+test('status push respects client preferences and token availability', function () {
+    [$client, $order] = orderForPushTests(OrderStatus::Confirmed);
+    $client->clientProfile()->create(['push_notifications_enabled' => false, 'fcm_token' => 'token']);
+    $gateway = new class implements PushGateway
+    {
+        public int $sent = 0;
+
+        public function send(string $token, string $title, string $body, array $data): void
+        {
+            $this->sent++;
+        }
+    };
+    app()->instance(PushGateway::class, $gateway);
+
+    app(OrderStatusPushService::class)->send($order->id, OrderStatus::Confirmed);
+    expect($gateway->sent)->toBe(0);
+
+    $client->clientProfile()->update(['push_notifications_enabled' => true, 'fcm_token' => null]);
+    app(OrderStatusPushService::class)->send($order->id, OrderStatus::Confirmed);
+    expect($gateway->sent)->toBe(0);
+});
+
+test('an invalid Firebase token is removed from the client profile', function () {
+    [$client, $order] = orderForPushTests(OrderStatus::Confirmed);
+    $client->clientProfile()->create(['push_notifications_enabled' => true, 'fcm_token' => 'invalid-token']);
+    app()->instance(PushGateway::class, new class implements PushGateway
+    {
+        public function send(string $token, string $title, string $body, array $data): void
+        {
+            throw NotFound::becauseTokenNotFound($token);
+        }
+    });
+
+    app(OrderStatusPushService::class)->send($order->id, OrderStatus::Confirmed);
+
+    expect($client->refresh()->clientProfile->fcm_token)->toBeNull();
+});
+
+test('a temporary Firebase failure is rethrown for queue retry', function () {
+    [$client, $order] = orderForPushTests(OrderStatus::Confirmed);
+    $client->clientProfile()->create(['push_notifications_enabled' => true, 'fcm_token' => 'token']);
+    app()->instance(PushGateway::class, new class implements PushGateway
+    {
+        public function send(string $token, string $title, string $body, array $data): void
+        {
+            throw new ServerUnavailable('Firebase is temporarily unavailable.');
+        }
+    });
+
+    app(OrderStatusPushService::class)->send($order->id, OrderStatus::Confirmed);
+})->throws(ServerUnavailable::class);
+
+test('Firebase gateway builds an FCM notification and data message', function () {
+    $messaging = Mockery::mock(Messaging::class);
+    $messaging->shouldReceive('send')
+        ->once()
+        ->withArgs(function (CloudMessage $message, bool $validateOnly = false): bool {
+            return $validateOnly === false && $message->jsonSerialize() === [
+                'data' => ['order_id' => '01J2QM1R7H7YV9JH1KACD6ZK3R'],
+                'notification' => [
+                    'title' => 'Статус заявки изменён',
+                    'body' => 'Заявка изменена',
+                ],
+                'token' => 'device-token',
+            ];
+        })
+        ->andReturn(['name' => 'projects/test/messages/1']);
+
+    (new FirebasePushGateway($messaging))->send(
+        'device-token',
+        'Статус заявки изменён',
+        'Заявка изменена',
+        ['order_id' => '01J2QM1R7H7YV9JH1KACD6ZK3R'],
+    );
+});
+
+test('disabled preferences are checked again before a queued push is sent', function () {
+    [$client, $order] = orderForPushTests(OrderStatus::Confirmed);
+    $client->clientProfile()->create(['push_notifications_enabled' => true, 'fcm_token' => 'token']);
+    $gateway = new class implements PushGateway
+    {
+        public bool $sent = false;
+
+        public function send(string $token, string $title, string $body, array $data): void
+        {
+            $this->sent = true;
+        }
+    };
+    app()->instance(PushGateway::class, $gateway);
 
     $client->clientProfile()->update(['push_notifications_enabled' => false]);
-    $gateway->sent = null;
     app(SendOrderStatusPush::class)->handle(new OrderStatusChanged($order->id, OrderStatus::Confirmed));
-    expect($gateway->sent)->toBeNull();
+    expect($gateway->sent)->toBeFalse();
 });
 
 /** @return array{User, CleaningOrder} */

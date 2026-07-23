@@ -111,11 +111,10 @@ docker compose build
 docker compose run --rm app php artisan key:generate --show
 ```
 
-Скопируйте выведенное значение `base64:...` в `APP_KEY` файла `.env`, затем запустите стек:
+Скопируйте выведенное значение `base64:...` в `APP_KEY` файла `.env`. При первом запуске сначала поднимите только PostgreSQL и PHP-FPM:
 
 ```bash
-docker compose up -d
-docker compose ps
+docker compose up -d postgres app
 ```
 
 Дождитесь состояния `healthy` у `app` и `postgres`. Затем выполните миграции, создающие в том числе таблицы `cache`, `sessions`, `jobs`, `job_batches` и `failed_jobs`, и прогрейте production-кеши:
@@ -123,6 +122,22 @@ docker compose ps
 ```bash
 docker compose exec app php artisan migrate --force
 docker compose exec app php artisan optimize
+```
+
+Только после миграций запустите `web`, очередь и планировщик:
+
+```bash
+docker compose up -d
+docker compose ps
+```
+
+Если весь стек уже был запущен до миграций и `queue` непрерывно пишет `relation "cache" does not exist`, исправьте состояние без пересборки образов:
+
+```bash
+docker compose stop queue scheduler
+docker compose exec app php artisan migrate --force
+docker compose exec app php artisan optimize
+docker compose start queue scheduler
 ```
 
 Symlink `public/storage` уже создается при сборке образа. Общий volume `app_storage` подключен к PHP-сервисам на запись и к `web` только на чтение.

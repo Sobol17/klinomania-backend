@@ -6,10 +6,12 @@ use App\Models\CleaningOrder;
 use App\Models\CleaningService;
 use App\Models\PaymentAttempt;
 use App\Models\User;
+use App\Modules\Notifications\Events\OrderStatusChanged;
 use App\Modules\Payments\Contracts\TBankGateway;
 use App\Modules\Payments\Exceptions\TBankGatewayException;
 use App\Modules\Payments\Support\TBankToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -69,6 +71,7 @@ test('payment provider failure is logged with order context', function () {
 });
 
 test('confirmed signed notification completes the matching order exactly once', function () {
+    Event::fake([OrderStatusChanged::class]);
     [, $order] = awaitingPaymentOrder();
     $attempt = PaymentAttempt::query()->create([
         'cleaning_order_id' => $order->id, 'provider' => 'tbank', 'external_order_id' => 'pay_01J2QM1R7H7YV9JH1KACD6ZK3R',
@@ -86,6 +89,11 @@ test('confirmed signed notification completes the matching order exactly once', 
     expect($order->refresh()->status)->toBe(OrderStatus::Completed)
         ->and($attempt->refresh()->status)->toBe('confirmed')
         ->and($attempt->provider_payment_id)->toBe('700031849');
+    Event::assertDispatchedTimes(OrderStatusChanged::class, 1);
+    Event::assertDispatched(
+        OrderStatusChanged::class,
+        fn (OrderStatusChanged $event): bool => $event->orderId === $order->id && $event->status === OrderStatus::Completed,
+    );
 });
 
 test('notification with an invalid signature does not change an order', function () {

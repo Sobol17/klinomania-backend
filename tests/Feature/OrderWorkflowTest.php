@@ -77,6 +77,48 @@ test('client can cancel only their unformed order', function () {
         ->assertConflict()->assertJsonPath('code', 'invalid_order_transition');
 });
 
+test('client can view only their order details by public id', function () {
+    $client = User::factory()->create(['role' => UserRole::Client]);
+    $otherClient = User::factory()->create(['role' => UserRole::Client]);
+    $service = CleaningService::query()->create([
+        'name' => 'Базовый минимум',
+        'slug' => 'standard',
+        'base_price' => 7700,
+    ]);
+    $order = CleaningOrder::query()->create([
+        'public_id' => '01J2QM1R7H7YV9JH1KACD6ZK3U',
+        'client_id' => $client->id,
+        'cleaning_service_id' => $service->id,
+        'status' => OrderStatus::Processing,
+        'address' => 'Иркутск, Ленина, 10',
+        'scheduled_at' => now()->addDay(),
+        'total_price' => 8500,
+    ]);
+    $order->addressSnapshot()->create([
+        'full_address' => 'Иркутск, Ленина, 10',
+        'apartment' => '5',
+    ]);
+    $order->lineItems()->createMany([
+        ['kind' => 'base', 'title' => 'Базовый минимум', 'amount' => 7700],
+        ['kind' => 'extra_option', 'source_option_id' => 'fridge-inside', 'title' => 'Холодильник внутри', 'amount' => 800],
+    ]);
+
+    Sanctum::actingAs($client);
+    $this->getJson("/api/v1/client/orders/{$order->public_id}")
+        ->assertOk()
+        ->assertJsonPath('data.id', $order->public_id)
+        ->assertJsonPath('data.status_label', 'В обработке')
+        ->assertJsonPath('data.service.id', 'standard')
+        ->assertJsonPath('data.address.apartment', '5')
+        ->assertJsonPath('data.line_items.1.option_id', 'fridge-inside')
+        ->assertJsonMissingPath('data.line_items.1.cleaner_earnings')
+        ->assertJsonMissingPath('data.client_id');
+
+    Sanctum::actingAs($otherClient);
+    $this->getJson("/api/v1/client/orders/{$order->public_id}")->assertForbidden();
+    $this->getJson('/api/v1/client/orders/01J2QM1R7H7YV9JH1KACD6ZK3V')->assertNotFound();
+});
+
 test('a single cleaner starts an order when joining its one-person team', function () {
     $client = User::factory()->create(['role' => UserRole::Client]);
     $cleaner = User::factory()->create(['role' => UserRole::Cleaner]);

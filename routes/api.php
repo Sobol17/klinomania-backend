@@ -29,6 +29,7 @@ Route::prefix('v1')->group(function (): void {
         Route::patch('client/profile', [ProfileController::class, 'updateClient']);
         Route::post('client/push-token', [ClientPushTokenController::class, 'store']);
         Route::get('client/orders', [ClientOrderController::class, 'index']);
+        Route::get('client/orders/{order}', [ClientOrderController::class, 'show']);
         Route::post('client/orders/{order}/payment', [ClientPaymentController::class, 'store']);
         Route::post('client/orders/{order}/cancel', [ClientOrderController::class, 'cancel']);
 
