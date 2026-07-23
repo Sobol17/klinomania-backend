@@ -21,6 +21,7 @@ x-php-service: &php-service
       condition: service_healthy
   volumes:
     - app_storage:/var/www/html/storage
+    - ./firebase.json:/run/secrets/firebase.json:ro
 
 services:
   app:

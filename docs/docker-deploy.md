@@ -77,7 +77,15 @@ TBANK_NOTIFICATION_URL=${APP_URL}/api/v1/payments/tbank/notifications
 
 `docker-compose.yaml` принудительно задает контейнерное имя `postgres` и database-драйверы Laravel. Значения `DB_DATABASE`, `DB_USERNAME` и `DB_PASSWORD` берутся из `.env` одновременно приложением и контейнером PostgreSQL.
 
-Сгенерируйте надежные пароли любым доступным password manager. `.env` и Firebase service-account JSON нельзя коммитить. Путь к Firebase service-account JSON задаётся через `FIREBASE_CREDENTIALS_PATH` в `.env`; файл должен быть доступен в файловой системе, где запущен queue worker.
+Сгенерируйте надежные пароли любым доступным password manager. `.env` и Firebase service-account JSON нельзя коммитить.
+
+Положите Firebase service-account JSON в корень проекта на сервере под именем
+`firebase.json`. `docker-compose.yaml` монтирует его в PHP-контейнеры read-only
+как `/run/secrets/firebase.json`. В `.env` укажите контейнерный путь:
+
+```dotenv
+FIREBASE_CREDENTIALS_PATH=/run/secrets/firebase.json
+```
 
 ## 3. Сборка и первый запуск
 
@@ -208,6 +216,18 @@ docker compose exec app php artisan queue:restart
 docker compose up -d --force-recreate
 docker compose exec app php artisan optimize:clear
 docker compose exec app php artisan optimize
+```
+
+### Полная очистка очереди
+
+Следующие команды безвозвратно удаляют все ожидающие и failed jobs, после чего
+перезапускают queue worker:
+
+```bash
+docker compose stop queue
+docker compose exec app php artisan queue:clear database --queue=default --force
+docker compose exec app php artisan queue:flush
+docker compose up -d --force-recreate queue
 ```
 
 ## 6. Логи и диагностика
