@@ -77,22 +77,7 @@ TBANK_NOTIFICATION_URL=${APP_URL}/api/v1/payments/tbank/notifications
 
 `docker-compose.yaml` принудительно задает контейнерное имя `postgres` и database-драйверы Laravel. Значения `DB_DATABASE`, `DB_USERNAME` и `DB_PASSWORD` берутся из `.env` одновременно приложением и контейнером PostgreSQL.
 
-Сгенерируйте надежные пароли любым доступным password manager. `.env` и Firebase service-account JSON нельзя коммитить.
-
-`docker-compose.yaml` монтирует Firebase service-account JSON из
-`/var/www/klinomania-secrets/firebase.json` в PHP-контейнеры как
-`/run/secrets/firebase.json:ro` и задаёт `FIREBASE_CREDENTIALS_PATH`
-автоматически. Ограничьте доступ к файлу на VPS:
-
-```bash
-chmod 600 /var/www/klinomania-secrets/firebase.json
-```
-
-Если файл хранится в другом месте, укажите абсолютный host path в `.env`:
-
-```dotenv
-FIREBASE_CREDENTIALS_HOST_PATH=/absolute/path/to/firebase.json
-```
+Сгенерируйте надежные пароли любым доступным password manager. `.env` и Firebase service-account JSON нельзя коммитить. Путь к Firebase service-account JSON задаётся через `FIREBASE_CREDENTIALS_PATH` в `.env`; файл должен быть доступен в файловой системе, где запущен queue worker.
 
 ## 3. Сборка и первый запуск
 
