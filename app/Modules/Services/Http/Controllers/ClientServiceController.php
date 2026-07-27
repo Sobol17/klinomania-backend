@@ -17,17 +17,15 @@ use Illuminate\Validation\ValidationException;
 
 class ClientServiceController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(): JsonResponse
     {
-        $this->ensureClient($request);
         $services = CleaningService::query()->where('is_active', true)->whereNotNull('slug')->orderBy('sort_order')->get();
 
         return response()->json(['data' => $services->map(fn (CleaningService $service) => $this->serviceCard($service))->values()]);
     }
 
-    public function show(Request $request, string $serviceId): JsonResponse
+    public function show(string $serviceId): JsonResponse
     {
-        $this->ensureClient($request);
         $service = CleaningService::query()->where('slug', $serviceId)->where('is_active', true)->first();
         if ($service === null) {
             return response()->json(['message' => 'Service not found.', 'code' => 'service_not_found'], 404);

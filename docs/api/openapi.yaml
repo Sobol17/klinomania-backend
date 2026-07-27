@@ -130,7 +130,6 @@ paths:
     get:
       tags: [Services]
       summary: List active client services
-      security: [{bearerAuth: []}]
       responses:
         '200':
           description: Service catalog
@@ -146,7 +145,6 @@ paths:
     get:
       tags: [Services]
       summary: Get a service configuration
-      security: [{bearerAuth: []}]
       parameters:
         - name: serviceId
           in: path

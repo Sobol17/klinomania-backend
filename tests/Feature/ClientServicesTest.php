@@ -12,7 +12,6 @@ uses(RefreshDatabase::class);
 
 test('client can browse a service and create an order directly', function () {
     $client = User::factory()->create(['role' => UserRole::Client]);
-    Sanctum::actingAs($client);
     $service = CleaningService::query()->create([
         'name' => 'Базовый минимум', 'slug' => 'standard', 'base_price' => 7700, 'min_price' => 7700,
         'min_area' => 30, 'max_area' => 160, 'area_step' => 10, 'cleaners_label' => '1 клинер', 'duration_label' => '2–3 часа',
@@ -21,7 +20,13 @@ test('client can browse a service and create an order directly', function () {
         ServiceOption::query()->create(['cleaning_service_id' => $service->id, 'code' => $code, 'group' => $group, 'title' => $code, 'is_addon' => $addon, 'is_default' => $default, 'price_modifier' => $modifier]);
     }
 
+    $this->getJson('/api/v1/client/services')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.id', 'standard');
     $this->getJson('/api/v1/client/services/standard')->assertOk()->assertJsonPath('data.id', 'standard');
+
+    Sanctum::actingAs($client);
     $payload = [
         'service_id' => 'standard',
         'room_option_id' => 'room-1',

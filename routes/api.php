@@ -18,12 +18,12 @@ Route::prefix('v1')->group(function (): void {
     Route::post('cleaner/auth/login', [CleanerAuthController::class, 'login']);
 
     Route::get('services', [ServiceController::class, 'index']);
+    Route::get('client/services', [ClientServiceController::class, 'index']);
+    Route::get('client/services/{serviceId}', [ClientServiceController::class, 'show']);
     Route::post('payments/tbank/notifications', [TBankNotificationController::class, 'store']);
 
     Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('client/home-summary', [ClientServiceController::class, 'homeSummary']);
-        Route::get('client/services', [ClientServiceController::class, 'index']);
-        Route::get('client/services/{serviceId}', [ClientServiceController::class, 'show']);
         Route::post('client/orders', [ClientServiceController::class, 'createOrder'])->middleware('throttle:order-checkout');
         Route::get('client/profile', [ProfileController::class, 'client']);
         Route::patch('client/profile', [ProfileController::class, 'updateClient']);
