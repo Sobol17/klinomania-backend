@@ -5,8 +5,10 @@ namespace App\Providers;
 use App\Modules\Identity\Contracts\SmsGateway;
 use App\Modules\Identity\Gateways\NotisendSmsGateway;
 use App\Modules\Notifications\Contracts\PushGateway;
+use App\Modules\Notifications\Events\OrderCreated;
 use App\Modules\Notifications\Events\OrderStatusChanged;
 use App\Modules\Notifications\Gateways\FirebasePushGateway;
+use App\Modules\Notifications\Listeners\NotifyAdminsAboutNewOrder;
 use App\Modules\Notifications\Listeners\SendOrderStatusPush;
 use App\Modules\Payments\Contracts\TBankGateway;
 use App\Modules\Payments\Gateways\HttpTBankGateway;
@@ -47,6 +49,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Event::listen(OrderCreated::class, NotifyAdminsAboutNewOrder::class);
         Event::listen(OrderStatusChanged::class, SendOrderStatusPush::class);
 
         RateLimiter::for('order-checkout', function (Request $request): Limit {

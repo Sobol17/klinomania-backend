@@ -7,7 +7,9 @@ use App\Models\CleaningOrder;
 use App\Models\CleaningService;
 use App\Models\ServiceOption;
 use App\Models\User;
+use App\Modules\Notifications\Events\OrderCreated;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -121,6 +123,8 @@ class CreateOrder
                 fn (array $item) => ['kind' => $item['kind'], 'source_option_id' => $item['option_id'] ?? null, 'title' => $item['title'], 'amount' => $item['amount'], 'cleaner_earnings' => $item['cleaner_earnings']],
                 $lineItems,
             ));
+
+            Event::dispatch(new OrderCreated($order->id));
 
             return $order;
         });

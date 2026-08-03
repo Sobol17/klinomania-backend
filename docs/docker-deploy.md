@@ -62,6 +62,15 @@ CACHE_STORE=database
 SESSION_DRIVER=database
 QUEUE_CONNECTION=database
 
+MAIL_MAILER=smtp
+MAIL_SCHEME=smtp
+MAIL_HOST=<smtp-host>
+MAIL_PORT=587
+MAIL_USERNAME=<smtp-username>
+MAIL_PASSWORD=<smtp-password>
+MAIL_FROM_ADDRESS=<sender-email>
+MAIL_FROM_NAME="${APP_NAME}"
+
 KLINOMANIA_CLIENT_OTP_STUB_ENABLED=false
 KLINOMANIA_CLEANER_CODE_STUB_ENABLED=false
 KLINOMANIA_ADMIN_EMAIL=<admin-email>
@@ -76,6 +85,9 @@ TBANK_NOTIFICATION_URL=${APP_URL}/api/v1/payments/tbank/notifications
 ```
 
 `docker-compose.yaml` принудительно задает контейнерное имя `postgres` и database-драйверы Laravel. Значения `DB_DATABASE`, `DB_USERNAME` и `DB_PASSWORD` берутся из `.env` одновременно приложением и контейнером PostgreSQL.
+
+Worker `queue` должен постоянно работать: через него отправляются email- и
+PUSH-уведомления. Адрес в `APP_URL` используется для ссылки на заявку в письме.
 
 Сгенерируйте надежные пароли любым доступным password manager. `.env` и Firebase service-account JSON нельзя коммитить.
 
