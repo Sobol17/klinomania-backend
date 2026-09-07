@@ -4,25 +4,21 @@ namespace App\Filament\Resources\Users\Pages;
 
 use App\Enums\UserRole;
 use App\Filament\Resources\Users\UserResource;
+use App\Modules\Identity\Actions\ResetCleanerAccessCode;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
-use Illuminate\Database\Eloquent\Model;
 
 class CreateUser extends CreateRecord
 {
     protected static string $resource = UserResource::class;
 
-    protected function handleRecordCreation(array $data): Model
+    protected ?bool $hasDatabaseTransactions = true;
+
+    protected function afterCreate(): void
     {
-        $record = parent::handleRecordCreation($data);
-
-        if ($record->role === UserRole::Cleaner) {
-            $record->cleanerProfile()->firstOrCreate([]);
+        if ($this->record->role === UserRole::Cleaner) {
+            $code = app(ResetCleanerAccessCode::class)->execute($this->record);
+            Notification::make()->title('Код доступа клинера')->body($code)->persistent()->success()->send();
         }
-
-        if ($record->role === UserRole::Client) {
-            $record->clientProfile()->firstOrCreate([]);
-        }
-
-        return $record;
     }
 }
