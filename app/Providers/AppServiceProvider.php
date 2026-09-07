@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Enums\UserRole;
+use App\Models\User;
 use App\Modules\Identity\Contracts\SmsGateway;
 use App\Modules\Identity\Gateways\NotisendSmsGateway;
 use App\Modules\Notifications\Contracts\PushGateway;
@@ -15,6 +17,7 @@ use App\Modules\Payments\Gateways\HttpTBankGateway;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Kreait\Firebase\Contract\Messaging;
@@ -49,6 +52,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Gate::define('access-admin', fn (User $user): bool => $user->role === UserRole::Admin);
+
         Event::listen(OrderCreated::class, NotifyAdminsAboutNewOrder::class);
         Event::listen(OrderStatusChanged::class, SendOrderStatusPush::class);
 

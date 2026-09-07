@@ -19,6 +19,7 @@ class EditUser extends EditRecord
         return [
             Action::make('generateCleanerCode')
                 ->label('Сгенерировать код клинера')
+                ->authorize(fn (): bool => static::getResource()::canEdit($this->record))
                 ->visible(fn (): bool => $this->record->role === UserRole::Cleaner)
                 ->action(function (): void {
                     $code = (string) random_int(100000, 999999);

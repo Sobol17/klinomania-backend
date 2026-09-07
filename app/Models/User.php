@@ -25,7 +25,7 @@ class User extends Authenticatable implements FilamentUser
 
     public function canAccessPanel(Panel $panel): bool
     {
-        return $this->role === UserRole::Admin;
+        return $this->can('access-admin');
     }
 
     public function clientProfile(): HasOne

@@ -19,6 +19,7 @@ class EditCleaningOrder extends EditRecord
         return [
             OrderWorkflowAction::make('confirm')
                 ->label('Подтвердить заявку')
+                ->authorize(fn (): bool => static::getResource()::canEdit($this->record))
                 ->color('success')
                 ->visible(fn (): bool => $this->record->status === OrderStatus::Processing)
                 ->action(function (OrderWorkflow $workflow): void {

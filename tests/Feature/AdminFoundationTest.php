@@ -11,9 +11,11 @@ use App\Models\User;
 use App\Modules\Orders\Actions\OrderWorkflow;
 use App\Modules\Orders\Exceptions\ChecklistIncomplete;
 use App\Modules\Orders\Exceptions\InvalidOrderTransition;
+use App\Policies\CleaningOrderPolicy;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Filament\Support\Exceptions\Halt;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 
@@ -82,4 +84,20 @@ test('workflow actions halt with a danger notification for incomplete checklists
         ->title('Сначала выполните все пункты чек-листа')
         ->body('Обновите страницу и проверьте состояние заявки.')
         ->danger());
+});
+
+test('revoking update permission prevents confirmation from an already open page', function () {
+    $page = Livewire::test(EditCleaningOrder::class, ['record' => $this->order->getRouteKey()]);
+    $this->app->instance(CleaningOrderPolicy::class, new class extends CleaningOrderPolicy
+    {
+        public function update(User $user, Model $record): bool
+        {
+            return false;
+        }
+    });
+
+    $page->assertActionHidden('confirm')->call('mountAction', 'confirm');
+
+    expect($this->order->refresh()->status)->toBe(OrderStatus::Processing);
+    Notification::assertNotNotified();
 });
