@@ -2,7 +2,10 @@
 
 namespace App\Enums;
 
-enum ChecklistZone: string
+use Filament\Support\Contracts\HasColor;
+use Filament\Support\Contracts\HasLabel;
+
+enum ChecklistZone: string implements HasColor, HasLabel
 {
     case Everywhere = 'all';
     case Rooms = 'rooms';
@@ -10,6 +13,16 @@ enum ChecklistZone: string
     case Bathroom = 'bathroom';
 
     public function label(): string
+    {
+        return $this->getLabel();
+    }
+
+    public function getColor(): string
+    {
+        return 'gray';
+    }
+
+    public function getLabel(): string
     {
         return match ($this) {
             self::Everywhere => 'Везде',

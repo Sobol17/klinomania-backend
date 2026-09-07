@@ -2,7 +2,6 @@
 
 namespace App\Modules\Orders\Http\Controllers;
 
-use App\Enums\OrderStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\CleaningOrder;
@@ -64,7 +63,7 @@ class ClientOrderController extends Controller
         return [
             'id' => $order->public_id,
             'status' => $order->status->value,
-            'status_label' => $this->statusLabel($order->status),
+            'status_label' => $order->status->getLabel(),
             'scheduled_at' => $order->scheduled_at,
             'total_price' => $order->total_price,
             'currency' => $order->currency,
@@ -88,18 +87,5 @@ class ClientOrderController extends Controller
             ])->values(),
             'created_at' => $order->created_at,
         ];
-    }
-
-    private function statusLabel(OrderStatus $status): string
-    {
-        return match ($status) {
-            OrderStatus::Processing => 'В обработке',
-            OrderStatus::Confirmed => 'Подтверждена',
-            OrderStatus::TeamFormed => 'Команда сформирована',
-            OrderStatus::InProgress => 'В работе',
-            OrderStatus::AwaitingPayment => 'Ожидает оплаты',
-            OrderStatus::Completed => 'Выполнена',
-            OrderStatus::Cancelled => 'Отменена',
-        };
     }
 }

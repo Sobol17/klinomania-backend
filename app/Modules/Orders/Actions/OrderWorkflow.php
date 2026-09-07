@@ -6,6 +6,8 @@ use App\Enums\OrderStatus;
 use App\Models\CleaningOrder;
 use App\Models\User;
 use App\Modules\Notifications\Events\OrderStatusChanged;
+use App\Modules\Orders\Exceptions\ChecklistIncomplete;
+use App\Modules\Orders\Exceptions\InvalidOrderTransition;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 
@@ -157,12 +159,12 @@ class OrderWorkflow
 
     private function conflict(string $message): never
     {
-        abort(response()->json(['message' => $message, 'code' => 'invalid_order_transition'], 409));
+        throw new InvalidOrderTransition($message);
     }
 
     private function checklistIncomplete(): never
     {
-        abort(response()->json(['message' => 'All checklist items must be completed before finishing the order.', 'code' => 'checklist_incomplete'], 409));
+        throw new ChecklistIncomplete;
     }
 
     private function statusChanged(CleaningOrder $order): void

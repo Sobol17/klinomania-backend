@@ -33,7 +33,7 @@ class UserResource extends Resource
             TextInput::make('phone')->label('Телефон')->tel()->maxLength(32)->unique(ignoreRecord: true),
             TextInput::make('email')->label('Электронная почта')->email()->maxLength(255)->unique(ignoreRecord: true),
             TextInput::make('password')->label('Пароль')->password()->dehydrated(fn (?string $state): bool => filled($state)),
-            Select::make('role')->label('Роль')->options(self::roleOptions())->required(),
+            Select::make('role')->label('Роль')->options(UserRole::class)->required(),
         ]);
     }
 
@@ -43,7 +43,7 @@ class UserResource extends Resource
             TextColumn::make('name')->label('Имя')->searchable(),
             TextColumn::make('phone')->label('Телефон')->searchable(),
             TextColumn::make('email')->label('Электронная почта')->searchable(),
-            TextColumn::make('role')->label('Роль')->badge()->formatStateUsing(fn (UserRole $state): string => self::roleLabel($state))->sortable(),
+            TextColumn::make('role')->label('Роль')->badge()->sortable(),
             TextColumn::make('created_at')->label('Создано')->dateTime()->sortable(),
         ]);
     }
@@ -55,21 +55,5 @@ class UserResource extends Resource
             'create' => CreateUser::route('/create'),
             'edit' => EditUser::route('/{record}/edit'),
         ];
-    }
-
-    private static function roleOptions(): array
-    {
-        return collect(UserRole::cases())->mapWithKeys(
-            fn (UserRole $role): array => [$role->value => self::roleLabel($role)]
-        )->all();
-    }
-
-    private static function roleLabel(UserRole $role): string
-    {
-        return match ($role) {
-            UserRole::Client => 'Клиент',
-            UserRole::Cleaner => 'Клинер',
-            UserRole::Admin => 'Администратор',
-        };
     }
 }

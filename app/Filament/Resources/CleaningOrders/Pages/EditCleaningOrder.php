@@ -3,9 +3,9 @@
 namespace App\Filament\Resources\CleaningOrders\Pages;
 
 use App\Enums\OrderStatus;
+use App\Filament\Actions\OrderWorkflowAction;
 use App\Filament\Resources\CleaningOrders\CleaningOrderResource;
 use App\Modules\Orders\Actions\OrderWorkflow;
-use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
@@ -17,7 +17,7 @@ class EditCleaningOrder extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('confirm')
+            OrderWorkflowAction::make('confirm')
                 ->label('Подтвердить заявку')
                 ->color('success')
                 ->visible(fn (): bool => $this->record->status === OrderStatus::Processing)

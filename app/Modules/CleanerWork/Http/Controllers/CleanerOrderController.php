@@ -157,7 +157,7 @@ class CleanerOrderController extends Controller
         return [
             'id' => $order->public_id,
             'status' => $order->status->value,
-            'status_label' => $this->statusLabel($order->status),
+            'status_label' => $order->status->getLabel(),
             'scheduled_at' => $order->scheduled_at,
             'total_price' => $order->total_price,
             'cleaner_earnings' => $order->cleanerEarnings($order->cleaners_count),
@@ -222,18 +222,5 @@ class CleanerOrderController extends Controller
         unset($data['line_items'], $data['cleaners_count']);
 
         return [...$data, 'cleaner_earnings' => $order->cleanerEarnings($cleanerCount)];
-    }
-
-    private function statusLabel(OrderStatus $status): string
-    {
-        return match ($status) {
-            OrderStatus::Processing => 'В обработке',
-            OrderStatus::Confirmed => 'Подтверждена',
-            OrderStatus::TeamFormed => 'Команда сформирована',
-            OrderStatus::InProgress => 'В работе',
-            OrderStatus::AwaitingPayment => 'Ожидает оплаты',
-            OrderStatus::Completed => 'Выполнена',
-            OrderStatus::Cancelled => 'Отменена',
-        };
     }
 }

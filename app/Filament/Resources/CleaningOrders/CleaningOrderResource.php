@@ -79,7 +79,6 @@ class CleaningOrderResource extends Resource
             TextColumn::make('status')
                 ->label('Статус')
                 ->badge()
-                ->formatStateUsing(fn (OrderStatus $state): string => self::statusLabel($state))
                 ->sortable(),
             TextColumn::make('service.name')->label('Услуга')->searchable(),
             TextColumn::make('client.phone')->label('Клиент')->searchable(),
@@ -88,15 +87,7 @@ class CleaningOrderResource extends Resource
             TextColumn::make('scheduled_at')->label('Дата и время уборки')->dateTime()->sortable(),
         ])
             ->filters([
-                SelectFilter::make('status')->label('Статус')->options([
-                    'processing' => 'В обработке',
-                    'confirmed' => 'Подтверждена',
-                    'team_formed' => 'Команда сформирована',
-                    'in_progress' => 'В работе',
-                    'awaiting_payment' => 'Ожидает оплаты',
-                    'completed' => 'Выполнена',
-                    'cancelled' => 'Отменена',
-                ]),
+                SelectFilter::make('status')->label('Статус')->options(OrderStatus::class),
             ])
             ->recordActions([EditAction::make()]);
     }
@@ -124,18 +115,5 @@ class CleaningOrderResource extends Resource
             ->orderBy('sort_order')
             ->pluck('title', 'code')
             ->all();
-    }
-
-    private static function statusLabel(OrderStatus $status): string
-    {
-        return match ($status) {
-            OrderStatus::Processing => 'В обработке',
-            OrderStatus::Confirmed => 'Подтверждена',
-            OrderStatus::TeamFormed => 'Команда сформирована',
-            OrderStatus::InProgress => 'В работе',
-            OrderStatus::AwaitingPayment => 'Ожидает оплаты',
-            OrderStatus::Completed => 'Выполнена',
-            OrderStatus::Cancelled => 'Отменена',
-        };
     }
 }

@@ -24,12 +24,12 @@
 `UserResource::roleLabel()` и `CleaningOrderResource::statusLabel()`; в фильтре статусов
 `CleaningOrderResource` те же строки записаны **в третий раз** литералами.
 
-- [ ] `App\Enums\UserRole`, `OrderStatus` — реализовать `Filament\Support\Contracts\HasLabel`
+- [x] `App\Enums\UserRole`, `OrderStatus` — реализовать `Filament\Support\Contracts\HasLabel`
       и `HasColor`; `ChecklistZone` уже имеет `label()`, привести к тому же контракту.
 - [ ] Создаваемые в эпике `UserStatus` ([ADM-02](ADM-02-users.md)), `ComplaintStatus`
       ([ADM-06](ADM-06-complaints.md)), `PaymentStatus` ([ADM-07](ADM-07-payments.md)) —
       сразу с этими контрактами.
-- [ ] Удалить приватные `roleLabel()` и `statusLabel()`, перевести фильтры на `::class` enum.
+- [x] Удалить приватные `roleLabel()` и `statusLabel()`, перевести фильтры на `::class` enum.
 
 ### A2. Доменные исключения вместо `abort()`
 
@@ -37,10 +37,10 @@
 HTTP-связанность, из-за которой панель получит сырой JSON вместо нотификации.
 Подробности в [ADM-04](ADM-04-orders.md).
 
-- [ ] `app/Modules/Orders/Exceptions/InvalidOrderTransition.php`, `ChecklistIncomplete.php`.
-- [ ] `OrderWorkflow` бросает исключения; контроллеры API мапят их в прежние 409 с кодами
+- [x] `app/Modules/Orders/Exceptions/InvalidOrderTransition.php`, `ChecklistIncomplete.php`.
+- [x] `OrderWorkflow` бросает исключения; общий обработчик API в `bootstrap/app.php` мапит их в прежние 409 с кодами
       `invalid_order_transition` и `checklist_incomplete` — **контракт API не меняется**.
-- [ ] Базовое действие Filament, превращающее эти исключения в `Notification::danger()`.
+- [x] Базовое действие Filament, превращающее эти исключения в `Notification::danger()`.
 
 ### A3. Политики доступа
 
@@ -116,3 +116,21 @@ HTTP-связанность, из-за которой панель получи�
   на прод. Проверка обязательна перед сдачей.
 - Уведомления помечены `ShouldQueue`: без запущенного воркера письма не уходят,
   а на демонстрации это выглядит как несделанная функциональность.
+
+## Прогресс — 2026-09-07
+
+Выполнены A1 для существующих enum-классов и A2. `ChecklistZone::label()` сохранён
+как совместимый делегат `getLabel()`. Подписи заказа в клиентском и клинерском API
+также берутся из `OrderStatus`; значения ответов не изменены.
+
+`OrderWorkflowAction` подключён к подтверждению заявки: доменный отказ показывает
+русское danger-уведомление и останавливает действие. Преобразование исключений в JSON
+сосредоточено на HTTP-границе в `bootstrap/app.php`, чтобы не дублировать обработку
+в контроллерах. Коды, сообщения и HTTP-статусы публичного API сохранены.
+
+Проверки: `AdminFoundationTest` покрывает таблицу и фильтр, подтверждение заявки,
+конкурентную смену статуса, доменное исключение и уведомление о незавершённом чек-листе.
+Расширен `FilamentLocalizationTest`; существующие ожидания workflow и чек-листов не изменены.
+
+Следом: A3 (политики доступа), затем ADM-01 и ADM-02. Новые enum-классы статусов
+добавляются вместе со своими доменами в ADM-02/06/07; A4 и сдача этапа остаются открыты.
