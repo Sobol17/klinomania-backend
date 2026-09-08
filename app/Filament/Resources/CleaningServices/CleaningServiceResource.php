@@ -6,20 +6,32 @@ use App\Enums\ChecklistZone;
 use App\Filament\Resources\CleaningServices\Pages\CreateCleaningService;
 use App\Filament\Resources\CleaningServices\Pages\EditCleaningService;
 use App\Filament\Resources\CleaningServices\Pages\ListCleaningServices;
+use App\Filament\Resources\CleaningServices\RelationManagers\OptionsRelationManager;
 use App\Models\CleaningService;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\EditAction;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Repeater\TableColumn;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
-use Filament\Tables\Columns\IconColumn;
+use Filament\Support\Exceptions\Halt;
+use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ToggleColumn;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class CleaningServiceResource extends Resource
 {
@@ -36,19 +48,100 @@ class CleaningServiceResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            TextInput::make('name')->label('Название')->required()->maxLength(255),
-            Textarea::make('description')->label('Описание')->columnSpanFull(),
-            TextInput::make('base_price')->label('Базовая стоимость')->required()->integer()->minValue(0),
-            TextInput::make('cleaner_base_earnings')->label('Выручка команды клинеров')->required()->integer()->minValue(0)->default(0),
-            TextInput::make('required_cleaners')->label('Требуемое количество клинеров')->required()->integer()->minValue(1)->default(1),
-            Tabs::make('Чеклист по зонам')->tabs([
-                Tab::make(ChecklistZone::Everywhere->label())->schema([self::checklistRepeater(ChecklistZone::Everywhere)]),
-                Tab::make(ChecklistZone::Rooms->label())->schema([self::checklistRepeater(ChecklistZone::Rooms)]),
-                Tab::make(ChecklistZone::Kitchen->label())->schema([self::checklistRepeater(ChecklistZone::Kitchen)]),
-                Tab::make(ChecklistZone::Bathroom->label())->schema([self::checklistRepeater(ChecklistZone::Bathroom)]),
-            ])->columnSpanFull(),
-            Toggle::make('is_active')->label('Активна')->default(true),
+            Section::make('Карточка в мобильном приложении')->columns(2)->schema([
+                TextInput::make('name')->label('Название')->required()->maxLength(255)
+                    ->helperText('Заголовок карточки и детального экрана.'),
+                TextInput::make('slug')->label('ID услуги')->required()->alphaDash()->maxLength(255)->unique(ignoreRecord: true)
+                    ->helperText('Передаётся приложением при оформлении заказа. После публикации не менять.'),
+                TextInput::make('subtitle')->label('Подзаголовок')->maxLength(255),
+                TextInput::make('cleaners_label')->label('Подпись о клинерах')->maxLength(255)
+                    ->placeholder('Например, 1–2 клинера'),
+                TextInput::make('duration_label')->label('Продолжительность')->maxLength(255)
+                    ->placeholder('Например, 2–3 часа'),
+            ]),
+            Section::make('Описание')->schema([
+                Textarea::make('long_description')->label('Описание услуги')->rows(6)->columnSpanFull()
+                    ->helperText('Показывается под обложкой на детальном экране услуги.'),
+            ]),
+            Section::make('Стоимость')->schema([
+                TextInput::make('base_price')->label('Стоимость услуги, ₽')->required()->integer()->minValue(0)
+                    ->helperText('В приложении показывается как цена «от». К ней добавляются выбранные опции.'),
+            ]),
+            Section::make('Внутренние параметры')->columns(2)->collapsed()->schema([
+                TextInput::make('cleaner_base_earnings')->label('Выручка команды клинеров')->required()->integer()->minValue(0)->default(0),
+                TextInput::make('required_cleaners')->label('Требуемое количество клинеров')->required()->integer()->minValue(1)->default(1),
+                TextInput::make('sort_order')->label('Порядок в каталоге')->required()->integer()->minValue(0)->default(0),
+                Toggle::make('is_active')->label('Показывать в приложении')->default(true),
+            ]),
+            Section::make('Изображения в приложении')->columns(2)->schema([
+                self::imageUpload('image_url', 'Обложка услуги')
+                    ->helperText('Показывается в верхней части детального экрана.'),
+                self::imageUpload('gallery', 'Галерея')->multiple()->reorderable()
+                    ->helperText('Порядок изображений сохраняется для мобильного приложения.'),
+            ]),
+            Section::make('Что входит в уборку')->schema([
+                Tabs::make('Чек-лист по зонам')->tabs([
+                    Tab::make(ChecklistZone::Everywhere->label())->schema([self::checklistRepeater(ChecklistZone::Everywhere)]),
+                    Tab::make(ChecklistZone::Rooms->label())->schema([self::checklistRepeater(ChecklistZone::Rooms)]),
+                    Tab::make(ChecklistZone::Kitchen->label())->schema([self::checklistRepeater(ChecklistZone::Kitchen)]),
+                    Tab::make(ChecklistZone::Bathroom->label())->schema([self::checklistRepeater(ChecklistZone::Bathroom)]),
+                ])->columnSpanFull(),
+            ]),
         ]);
+    }
+
+    private static function imageUpload(string $name, string $label): FileUpload
+    {
+        return FileUpload::make($name)
+            ->label($label)
+            ->disk('public')
+            ->directory('services')
+            ->visibility('public')
+            ->image()
+            ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
+            ->maxSize(5120)
+            ->fetchFileInformation(false)
+            ->preventFilePathTampering(true, fn (string $file): bool => Str::startsWith($file, 'services/') && Storage::disk('public')->exists($file))
+            ->afterStateHydrated(function (FileUpload $component, mixed $state): void {
+                $paths = array_values(array_filter(array_map(self::publicStoragePath(...), Arr::wrap($state))));
+                $component->state($component->isMultiple() ? $paths : Arr::first($paths));
+            })
+            ->mutateDehydratedStateUsing(function (FileUpload $component, mixed $state): string|array|null {
+                $urls = array_values(array_filter(array_map(self::publicStorageUrl(...), Arr::wrap($state))));
+
+                return $component->isMultiple() ? $urls : Arr::first($urls);
+            })
+            ->deleteUploadedFileUsing(fn (string $file): bool => Storage::disk('public')->delete($file));
+    }
+
+    public static function publicStoragePath(mixed $url): ?string
+    {
+        if (! is_string($url) || blank($url)) {
+            return null;
+        }
+
+        if (! filter_var($url, FILTER_VALIDATE_URL)) {
+            return Str::startsWith($url, 'services/') ? $url : null;
+        }
+
+        $path = parse_url($url, PHP_URL_PATH);
+
+        return is_string($path) && Str::startsWith($path, '/storage/services/')
+            ? Str::after($path, '/storage/')
+            : null;
+    }
+
+    public static function publicStorageUrl(mixed $path): ?string
+    {
+        if (! is_string($path) || blank($path)) {
+            return null;
+        }
+
+        if (filter_var($path, FILTER_VALIDATE_URL)) {
+            return $path;
+        }
+
+        return rtrim((string) config('filesystems.disks.public.url'), '/').'/'.ltrim($path, '/');
     }
 
     private static function checklistRepeater(ChecklistZone $zone): Repeater
@@ -77,14 +170,48 @@ class CleaningServiceResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return $table->columns([
-            TextColumn::make('name')->label('Название')->searchable()->sortable(),
-            TextColumn::make('base_price')->label('Базовая стоимость')->money('RUB')->sortable(),
-            TextColumn::make('cleaner_base_earnings')->label('Выручка клинеров')->money('RUB')->sortable(),
-            TextColumn::make('required_cleaners')->label('Клинеры')->sortable(),
-            IconColumn::make('is_active')->label('Активна')->boolean(),
-            TextColumn::make('created_at')->label('Создано')->dateTime()->sortable(),
-        ]);
+        return $table
+            ->columns([
+                ImageColumn::make('image_url')->label('Изображение')->square()->imageSize(48),
+                TextColumn::make('name')->label('Название')->searchable()->sortable(),
+                TextColumn::make('base_price')->label('Стоимость')->money('RUB')->sortable(),
+                TextColumn::make('options_count')->label('Опции')->counts('options')->sortable(),
+                TextColumn::make('required_cleaners')->label('Клинеры')->sortable(),
+                TextColumn::make('sort_order')->label('Порядок')->sortable(),
+                ToggleColumn::make('is_active')->label('Активна')->disabled(fn (CleaningService $record): bool => ! static::canEdit($record)),
+            ])
+            ->filters([
+                TernaryFilter::make('is_active')->label('Активность')->trueLabel('Только активные')->falseLabel('Только неактивные'),
+            ])
+            ->defaultSort('sort_order')
+            ->reorderable('sort_order')
+            ->recordActions([
+                EditAction::make(),
+                static::deleteAction(),
+            ]);
+    }
+
+    public static function deleteAction(): DeleteAction
+    {
+        return DeleteAction::make()->using(function (CleaningService $record): bool {
+            if ($record->orders()->exists()) {
+                Notification::make()
+                    ->title('Услугу нельзя удалить')
+                    ->body('С услугой связаны заказы. Деактивируйте её, чтобы скрыть из каталога.')
+                    ->danger()
+                    ->persistent()
+                    ->send();
+
+                throw new Halt;
+            }
+
+            return (bool) $record->delete();
+        });
+    }
+
+    public static function getRelations(): array
+    {
+        return [OptionsRelationManager::class];
     }
 
     public static function getPages(): array

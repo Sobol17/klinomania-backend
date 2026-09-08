@@ -123,6 +123,7 @@ docker compose up -d postgres app
 
 ```bash
 docker compose exec app php artisan migrate --force
+docker compose exec app php artisan storage:link
 docker compose exec app php artisan optimize
 ```
 
@@ -142,7 +143,7 @@ docker compose exec app php artisan optimize
 docker compose start queue scheduler
 ```
 
-Symlink `public/storage` уже создается при сборке образа. Общий volume `app_storage` подключен к PHP-сервисам на запись и к `web` только на чтение.
+Команда `storage:link` обязательна: загруженные из панели изображения услуг хранятся на диске `public` и доступны через `public/storage`. Внутренний Nginx также создаёт этот symlink при сборке образа. Общий volume `app_storage` подключен к PHP-сервисам на запись и к `web` только на чтение.
 
 Seeders не запускаются автоматически. Для первичного заполнения каталога и создания администратора сначала проверьте значения `KLINOMANIA_ADMIN_EMAIL` и `KLINOMANIA_ADMIN_PASSWORD`, затем явно выполните:
 

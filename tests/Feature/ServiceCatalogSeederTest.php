@@ -19,8 +19,8 @@ test('service catalog seeder creates three complete active services', function (
             ->and($service->long_description)->not->toBeEmpty()
             ->and($service->cleaners_label)->not->toBeEmpty()
             ->and($service->duration_label)->not->toBeEmpty()
-            ->and($service->image_url)->not->toBeEmpty()
-            ->and($service->gallery)->not->toBeEmpty()
+            ->and($service->image_url)->toBeNull()
+            ->and($service->gallery)->toBeEmpty()
             ->and($service->options)->not->toBeEmpty();
     });
 });

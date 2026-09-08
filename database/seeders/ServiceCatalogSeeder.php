@@ -51,11 +51,8 @@ class ServiceCatalogSeeder extends Seeder
             'cleaners_label' => $cleanersLabel,
             'required_cleaners' => (int) str_replace(' клинера', '', str_replace(' клинер', '', $cleanersLabel)),
             'duration_label' => $durationLabel,
-            'image_url' => "https://cdn.klinomania.ru/services/{$slug}/hero.jpg",
-            'gallery' => [
-                "https://cdn.klinomania.ru/services/{$slug}/gallery-1.jpg",
-                "https://cdn.klinomania.ru/services/{$slug}/gallery-2.jpg",
-            ],
+            'image_url' => null,
+            'gallery' => [],
             'base_price' => $basePrice,
             'price_per_sqm' => $areaPrice,
             'min_area' => 30,
