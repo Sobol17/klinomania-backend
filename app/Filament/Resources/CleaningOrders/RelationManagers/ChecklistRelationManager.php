@@ -10,15 +10,17 @@ class ChecklistRelationManager extends RelationManager
 {
     protected static string $relationship = 'checklistItems';
 
-    protected static ?string $title = 'Отметки чек-листа';
+    protected static ?string $title = 'История отметок чек-листа';
 
     public function table(Table $table): Table
     {
         return $table->columns([
-            TextColumn::make('checklistItem.title')->label('Пункт'),
+            TextColumn::make('checklistItem.title')->label('Работа')->wrap(),
             TextColumn::make('checklistItem.zone')->label('Зона')->badge(),
-            TextColumn::make('completedBy.name')->label('Выполнил')->placeholder('—'),
-            TextColumn::make('completed_at')->label('Выполнен')->dateTime()->placeholder('—'),
-        ])->emptyStateHeading('Выполненных пунктов пока нет');
+            TextColumn::make('completedBy.name')->label('Отметил')->placeholder('Пользователь не указан'),
+            TextColumn::make('completed_at')->label('Время отметки')->dateTime()->placeholder('Отметка снята'),
+        ])->emptyStateHeading('История пока пуста')
+            ->emptyStateDescription('Отметки появятся здесь, когда клинер начнёт выполнять чек-лист.')
+            ->emptyStateIcon('heroicon-o-clipboard-document-list');
     }
 }

@@ -8,6 +8,7 @@ use App\Filament\Resources\CleaningServices\Pages\EditCleaningService;
 use App\Filament\Resources\CleaningServices\Pages\ListCleaningServices;
 use App\Filament\Resources\CleaningServices\RelationManagers\OptionsRelationManager;
 use App\Models\CleaningService;
+use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\FileUpload;
@@ -19,9 +20,11 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Callout;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Exceptions\Halt;
 use Filament\Tables\Columns\ImageColumn;
@@ -79,14 +82,20 @@ class CleaningServiceResource extends Resource
                 self::imageUpload('gallery', 'Галерея')->multiple()->reorderable()
                     ->helperText('Порядок изображений сохраняется для мобильного приложения.'),
             ]),
-            Section::make('Что входит в уборку')->schema([
-                Tabs::make('Чек-лист по зонам')->tabs([
-                    Tab::make(ChecklistZone::Everywhere->label())->schema([self::checklistRepeater(ChecklistZone::Everywhere)]),
-                    Tab::make(ChecklistZone::Rooms->label())->schema([self::checklistRepeater(ChecklistZone::Rooms)]),
-                    Tab::make(ChecklistZone::Kitchen->label())->schema([self::checklistRepeater(ChecklistZone::Kitchen)]),
-                    Tab::make(ChecklistZone::Bathroom->label())->schema([self::checklistRepeater(ChecklistZone::Bathroom)]),
-                ])->columnSpanFull(),
-            ]),
+            Section::make('Маршрут уборки')
+                ->description('Соберите понятный маршрут по помещениям — именно так его увидит клинер в приложении.')
+                ->icon('heroicon-o-clipboard-document-check')
+                ->schema([
+                    Callout::make('Изменения применяются к текущим заказам')
+                        ->description('После сохранения обновлённый список применяется ко всем заказам этой услуги, включая созданные ранее. Удаление пункта также удалит связанную историю его отметок.')
+                        ->warning(),
+                    Tabs::make('Чек-лист по зонам')->tabs([
+                        self::checklistTab(ChecklistZone::Everywhere),
+                        self::checklistTab(ChecklistZone::Rooms),
+                        self::checklistTab(ChecklistZone::Kitchen),
+                        self::checklistTab(ChecklistZone::Bathroom),
+                    ])->columnSpanFull(),
+                ]),
         ]);
     }
 
@@ -162,10 +171,34 @@ class CleaningServiceResource extends Resource
             ])
             ->orderColumn('sort_order')
             ->reorderableWithDragAndDrop()
+            ->reorderableWithButtons()
             ->compact()
-            ->addActionLabel('Добавить работу')
+            ->addActionLabel('Добавить пункт в эту зону')
             ->defaultItems(0)
+            ->deleteAction(fn (Action $action): Action => $action
+                ->requiresConfirmation()
+                ->modalHeading('Удалить пункт чек-листа?')
+                ->modalDescription('После сохранения пункт исчезнет из всех заказов этой услуги, а связанная история отметок будет удалена.'))
             ->extraAttributes(['class' => 'service-checklist-repeater']);
+    }
+
+    private static function checklistTab(ChecklistZone $zone): Tab
+    {
+        return Tab::make($zone->getLabel())
+            ->icon(self::checklistZoneIcon($zone))
+            ->badge(fn (Get $get): int => count($get('checklistItems_'.$zone->value) ?? []))
+            ->badgeColor('primary')
+            ->schema([self::checklistRepeater($zone)]);
+    }
+
+    private static function checklistZoneIcon(ChecklistZone $zone): string
+    {
+        return match ($zone) {
+            ChecklistZone::Everywhere => 'heroicon-o-arrows-pointing-out',
+            ChecklistZone::Rooms => 'heroicon-o-home-modern',
+            ChecklistZone::Kitchen => 'heroicon-o-fire',
+            ChecklistZone::Bathroom => 'heroicon-o-sparkles',
+        };
     }
 
     public static function table(Table $table): Table

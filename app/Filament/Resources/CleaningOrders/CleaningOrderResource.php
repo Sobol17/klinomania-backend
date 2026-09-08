@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\CleaningOrders;
 
+use App\Enums\ChecklistZone;
 use App\Enums\OrderStatus;
 use App\Enums\UserRole;
 use App\Filament\Resources\CleaningOrders\Pages\CreateCleaningOrder;
@@ -12,6 +13,7 @@ use App\Filament\Resources\CleaningOrders\RelationManagers\ChecklistRelationMana
 use App\Filament\Resources\CleaningOrders\RelationManagers\CleanersRelationManager;
 use App\Filament\Resources\CleaningOrders\RelationManagers\LineItemsRelationManager;
 use App\Filament\Resources\CleaningOrders\RelationManagers\PaymentAttemptsRelationManager;
+use App\Filament\Resources\CleaningOrders\Support\OrderChecklistView;
 use App\Filament\Resources\Users\UserResource;
 use App\Models\CleaningOrder;
 use App\Models\ServiceOption;
@@ -29,6 +31,7 @@ use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
@@ -89,23 +92,49 @@ class CleaningOrderResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return $table->columns([
-            TextColumn::make('public_id')->label('ID')->searchable()->sortable(),
-            TextColumn::make('status')
-                ->label('Статус')
-                ->badge()
-                ->sortable(),
-            TextColumn::make('service.name')->label('Услуга')->searchable(),
-            TextColumn::make('client.phone')->label('Клиент')->searchable(),
-            TextColumn::make('cleaners.phone')->label('Клинеры')->listWithLineBreaks(),
-            TextColumn::make('cleaners_count')
-                ->label('Команда')
-                ->counts('cleaners')
-                ->badge()
-                ->color(fn (int $state): string => $state === 0 ? 'danger' : 'gray'),
-            TextColumn::make('total_price')->label('Итоговая стоимость')->money('RUB')->sortable(),
-            TextColumn::make('scheduled_at')->label('Дата и время уборки')->dateTime()->sortable(),
-        ])
+        return $table
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with([
+                'service.checklistItems',
+                'checklistItems.completedBy.cleanerProfile',
+                'lineItems.extraChecklistItem.completedBy.cleanerProfile',
+            ]))
+            ->columns([
+                TextColumn::make('public_id')->label('ID')->searchable()->sortable(),
+                TextColumn::make('status')
+                    ->label('Статус')
+                    ->badge()
+                    ->sortable(),
+                TextColumn::make('service.name')->label('Услуга')->searchable(),
+                TextColumn::make('client.phone')->label('Клиент')->searchable(),
+                TextColumn::make('cleaners.phone')->label('Клинеры')->listWithLineBreaks(),
+                TextColumn::make('cleaners_count')
+                    ->label('Команда')
+                    ->counts('cleaners')
+                    ->badge()
+                    ->color(fn (int $state): string => $state === 0 ? 'danger' : 'gray'),
+                TextColumn::make('checklist_progress')
+                    ->label('Чек-лист')
+                    ->state(function (CleaningOrder $record): string {
+                        $metrics = OrderChecklistView::metrics($record);
+
+                        return $metrics['total'] === 0
+                            ? 'Нет пунктов'
+                            : "{$metrics['completed']} из {$metrics['total']}";
+                    })
+                    ->badge()
+                    ->color(function (string $state, CleaningOrder $record): string {
+                        $metrics = OrderChecklistView::metrics($record);
+
+                        return match (true) {
+                            $metrics['total'] === 0 => 'gray',
+                            $metrics['remaining'] === 0 => 'success',
+                            default => 'warning',
+                        };
+                    })
+                    ->toggleable(),
+                TextColumn::make('total_price')->label('Итоговая стоимость')->money('RUB')->sortable(),
+                TextColumn::make('scheduled_at')->label('Дата и время уборки')->dateTime()->sortable(),
+            ])
             ->filters([
                 SelectFilter::make('status')->label('Статус')->options(OrderStatus::class),
                 SelectFilter::make('service')->label('Услуга')->relationship('service', 'name'),
@@ -202,26 +231,24 @@ class CleaningOrderResource extends Resource
                         TextEntry::make('pivot.completed_at')->label('Завершил')->dateTime()->placeholder('—'),
                     ]),
             ]),
-            Section::make('Чек-лист')->schema([
-                RepeatableEntry::make('checklist')
-                    ->hiddenLabel()
-                    ->state(fn (CleaningOrder $record): array => self::checklistState($record))
-                    ->placeholder('Для услуги не задан чек-лист')
-                    ->table([
-                        TableColumn::make('Тип'),
-                        TableColumn::make('Пункт'),
-                        TableColumn::make('Состояние'),
-                        TableColumn::make('Выполнил'),
-                        TableColumn::make('Время'),
-                    ])
-                    ->schema([
-                        TextEntry::make('kind')->label('Тип'),
-                        TextEntry::make('title')->label('Пункт'),
-                        TextEntry::make('status')->label('Состояние')->badge()->color(fn (string $state): string => $state === 'Выполнен' ? 'success' : 'gray'),
-                        TextEntry::make('completed_by')->label('Выполнил')->placeholder('—'),
-                        TextEntry::make('completed_at')->label('Время')->dateTime()->placeholder('—'),
-                    ]),
-            ]),
+            Section::make('Маршрут уборки')
+                ->description('Пункты расположены в том же порядке и по тем же зонам, что и в приложении клинера.')
+                ->icon('heroicon-o-clipboard-document-check')
+                ->schema([
+                    View::make('filament.resources.cleaning-orders.checklist-progress')
+                        ->viewData(fn (CleaningOrder $record): array => [
+                            'metrics' => OrderChecklistView::metrics($record),
+                            'sections' => OrderChecklistView::breakdown($record),
+                        ]),
+                    ...array_map(self::checklistZoneSection(...), ChecklistZone::cases()),
+                    Section::make('Дополнительные работы')
+                        ->description(fn (CleaningOrder $record): string => self::checklistSectionDescription(OrderChecklistView::extras($record)))
+                        ->icon('heroicon-o-plus-circle')
+                        ->visible(fn (CleaningOrder $record): bool => filled(OrderChecklistView::extras($record)))
+                        ->schema([
+                            self::checklistEntries('extra_checklist', fn (CleaningOrder $record): array => OrderChecklistView::extras($record)),
+                        ]),
+                ]),
             Section::make('Оплаты')->schema([
                 RepeatableEntry::make('paymentAttempts')->hiddenLabel()->placeholder('Попыток оплаты нет')
                     ->table([
@@ -281,43 +308,59 @@ class CleaningOrderResource extends Resource
         };
     }
 
-    /** @return array<int, array<string, mixed>> */
-    private static function checklistState(CleaningOrder $order): array
+    private static function checklistZoneSection(ChecklistZone $zone): Section
     {
-        $order->loadMissing([
-            'service.checklistItems',
-            'checklistItems.completedBy',
-            'lineItems.extraChecklistItem.completedBy',
-        ]);
+        return Section::make($zone->getLabel())
+            ->description(fn (CleaningOrder $record): string => self::checklistSectionDescription(OrderChecklistView::zone($record, $zone)))
+            ->icon(self::checklistZoneIcon($zone))
+            ->visible(fn (CleaningOrder $record): bool => filled(OrderChecklistView::zone($record, $zone)))
+            ->schema([
+                self::checklistEntries(
+                    "checklist_{$zone->value}",
+                    fn (CleaningOrder $record): array => OrderChecklistView::zone($record, $zone),
+                ),
+            ]);
+    }
 
-        $completedBase = $order->checklistItems->keyBy('service_checklist_item_id');
-        $baseItems = $order->service->checklistItems->map(function ($item) use ($completedBase): array {
-            $completion = $completedBase->get($item->id);
+    private static function checklistEntries(string $name, callable $state): RepeatableEntry
+    {
+        return RepeatableEntry::make($name)
+            ->hiddenLabel()
+            ->state($state)
+            ->table([
+                TableColumn::make('Работа'),
+                TableColumn::make('Состояние'),
+                TableColumn::make('Выполнил'),
+                TableColumn::make('Время'),
+            ])
+            ->schema([
+                TextEntry::make('title')->label('Работа')->weight('medium'),
+                TextEntry::make('status')
+                    ->label('Состояние')
+                    ->badge()
+                    ->icon(fn (string $state): string => $state === 'Выполнено' ? 'heroicon-m-check-circle' : 'heroicon-m-clock')
+                    ->color(fn (string $state): string => $state === 'Выполнено' ? 'success' : 'warning'),
+                TextEntry::make('completed_by')->label('Выполнил')->placeholder('Ещё никто'),
+                TextEntry::make('completed_at')->label('Время')->dateTime()->placeholder('—'),
+            ]);
+    }
 
-            return [
-                'kind' => 'Основной',
-                'title' => $item->title,
-                'status' => $completion?->completed_at ? 'Выполнен' : 'Не выполнен',
-                'completed_by' => $completion?->completedBy?->name ?? $completion?->completedBy?->phone,
-                'completed_at' => $completion?->completed_at,
-            ];
-        });
+    /** @param array<int, array<string, mixed>> $items */
+    private static function checklistSectionDescription(array $items): string
+    {
+        $completed = collect($items)->where('completed', true)->count();
 
-        $extraItems = $order->lineItems
-            ->where('kind', 'extra_option')
-            ->map(function ($item): array {
-                $completion = $item->extraChecklistItem;
+        return "Выполнено {$completed} из ".count($items);
+    }
 
-                return [
-                    'kind' => 'Доп. работа',
-                    'title' => $item->title,
-                    'status' => $completion?->completed_at ? 'Выполнен' : 'Не выполнен',
-                    'completed_by' => $completion?->completedBy?->name ?? $completion?->completedBy?->phone,
-                    'completed_at' => $completion?->completed_at,
-                ];
-            });
-
-        return $baseItems->concat($extraItems)->values()->all();
+    private static function checklistZoneIcon(ChecklistZone $zone): string
+    {
+        return match ($zone) {
+            ChecklistZone::Everywhere => 'heroicon-o-arrows-pointing-out',
+            ChecklistZone::Rooms => 'heroicon-o-home-modern',
+            ChecklistZone::Kitchen => 'heroicon-o-fire',
+            ChecklistZone::Bathroom => 'heroicon-o-sparkles',
+        };
     }
 
     /** @return array<string, string> */
