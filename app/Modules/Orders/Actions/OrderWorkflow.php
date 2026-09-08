@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Modules\Notifications\Events\OrderStatusChanged;
 use App\Modules\Orders\Exceptions\ChecklistIncomplete;
 use App\Modules\Orders\Exceptions\InvalidOrderTransition;
+use App\Modules\Orders\Exceptions\OrderAccessDenied;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 
@@ -130,8 +131,30 @@ class OrderWorkflow
         $order = DB::transaction(function () use ($order, $client): CleaningOrder {
             $order = $this->lockedOrder($order);
             if ($order->client_id !== $client->id) {
-                abort(response()->json(['message' => 'Forbidden.', 'code' => 'forbidden'], 403));
+                throw new OrderAccessDenied('Forbidden.');
             }
+            if (! in_array($order->status, [OrderStatus::Processing, OrderStatus::Confirmed], true)) {
+                $this->conflict('The order can no longer be cancelled.');
+            }
+            $order->forceFill(['status' => OrderStatus::Cancelled])->save();
+
+            return $order;
+        });
+
+        $this->statusChanged($order);
+
+        return $order;
+    }
+
+    public function cancelByAdmin(CleaningOrder $order): CleaningOrder
+    {
+        return $this->cancelWithoutOwnerCheck($order);
+    }
+
+    private function cancelWithoutOwnerCheck(CleaningOrder $order): CleaningOrder
+    {
+        $order = DB::transaction(function () use ($order): CleaningOrder {
+            $order = $this->lockedOrder($order);
             if (! in_array($order->status, [OrderStatus::Processing, OrderStatus::Confirmed], true)) {
                 $this->conflict('The order can no longer be cancelled.');
             }

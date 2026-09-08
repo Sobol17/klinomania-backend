@@ -2,6 +2,7 @@
 
 use App\Modules\Orders\Exceptions\ChecklistIncomplete;
 use App\Modules\Orders\Exceptions\InvalidOrderTransition;
+use App\Modules\Orders\Exceptions\OrderAccessDenied;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -19,13 +20,18 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->dontReport([InvalidOrderTransition::class, ChecklistIncomplete::class]);
+        $exceptions->dontReport([InvalidOrderTransition::class, ChecklistIncomplete::class, OrderAccessDenied::class]);
         $exceptions->render(function (InvalidOrderTransition|ChecklistIncomplete $exception, Request $request) {
             if ($request->is('api/*')) {
                 return response()->json([
                     'message' => $exception->getMessage(),
                     'code' => $exception instanceof ChecklistIncomplete ? 'checklist_incomplete' : 'invalid_order_transition',
                 ], 409);
+            }
+        });
+        $exceptions->render(function (OrderAccessDenied $exception, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json(['message' => $exception->getMessage(), 'code' => 'forbidden'], 403);
             }
         });
         $exceptions->shouldRenderJsonWhen(

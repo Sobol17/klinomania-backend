@@ -89,7 +89,7 @@ Filament вызывают действия из `app/Modules/*/Actions`. Люб�
 | [ADM-01](tasks/ADM-01-admin-auth.md) | Авторизация и доступ администратора | 1.1 | 3 SP | — |
 | [ADM-02](tasks/ADM-02-users.md) | Управление пользователями | 1.2 | 13 SP | ADM-08 (enum-каркас) |
 | [ADM-03](tasks/ADM-03-services.md) | Управление услугами | 1.3 | 8 SP | — |
-| [ADM-04](tasks/ADM-04-orders.md) | Управление заказами | 1.4 | 13 SP | ADM-08 |
+| [ADM-04](tasks/ADM-04-orders.md) | Управление заказами | 1.4 | 13 SP | ADM-08, ADM-06 для данных жалоб |
 | [ADM-05](tasks/ADM-05-checklists.md) | Управление чек-листами | 1.5 | 8 SP | ADM-04 |
 | [ADM-06](tasks/ADM-06-complaints.md) | Управление жалобами (новый домен) | 1.6 | 13 SP | ADM-08 |
 | [ADM-07](tasks/ADM-07-payments.md) | Управление оплатами | 1.7 | 5 SP | ADM-08 |
