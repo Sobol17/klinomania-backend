@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\PaymentStatus;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,6 +14,7 @@ class PaymentAttempt extends Model
     {
         return [
             'amount' => 'integer',
+            'status' => PaymentStatus::class,
             'expires_at' => 'datetime',
             'confirmed_at' => 'datetime',
         ];

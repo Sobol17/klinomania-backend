@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\OrderStatus;
+use App\Enums\PaymentStatus;
 use App\Enums\UserRole;
 use App\Models\CleaningOrder;
 use App\Models\CleaningService;
@@ -87,7 +88,7 @@ test('confirmed signed notification completes the matching order exactly once', 
     $this->postJson('/api/v1/payments/tbank/notifications', $payload)->assertOk()->assertSeeText('OK');
 
     expect($order->refresh()->status)->toBe(OrderStatus::Completed)
-        ->and($attempt->refresh()->status)->toBe('confirmed')
+        ->and($attempt->refresh()->status)->toBe(PaymentStatus::Confirmed)
         ->and($attempt->provider_payment_id)->toBe('700031849');
     Event::assertDispatchedTimes(OrderStatusChanged::class, 1);
     Event::assertDispatched(
@@ -109,7 +110,7 @@ test('notification with an invalid signature does not change an order', function
     ])->assertForbidden();
 
     expect($order->refresh()->status)->toBe(OrderStatus::AwaitingPayment)
-        ->and($attempt->refresh()->status)->toBe('pending');
+        ->and($attempt->refresh()->status)->toBe(PaymentStatus::Pending);
 });
 
 function awaitingPaymentOrder(): array

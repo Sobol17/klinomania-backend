@@ -3,6 +3,7 @@
 namespace App\Modules\Payments\Actions;
 
 use App\Enums\OrderStatus;
+use App\Enums\PaymentStatus;
 use App\Models\CleaningOrder;
 use App\Models\PaymentAttempt;
 use App\Modules\Payments\Contracts\TBankGateway;
@@ -24,7 +25,7 @@ class CreateTBankPayment
 
             $activeAttempt = $order->paymentAttempts()
                 ->where('provider', 'tbank')
-                ->where('status', 'pending')
+                ->where('status', PaymentStatus::Pending)
                 ->whereNotNull('payment_url')
                 ->where('expires_at', '>', now())
                 ->latest('id')
@@ -39,18 +40,18 @@ class CreateTBankPayment
                 'amount' => $order->total_price * 100,
                 'currency' => $order->currency,
                 'expires_at' => now()->addMinutes((int) config('services.tbank.link_ttl_minutes')),
-                'status' => 'creating',
+                'status' => PaymentStatus::Creating,
             ]);
         });
 
-        if ($attempt->status === 'pending') {
+        if ($attempt->status === PaymentStatus::Pending) {
             return $attempt;
         }
 
         try {
             $result = $this->gateway->initialize($attempt->load('order'), 'Оплата заказа '.$attempt->order->public_id);
         } catch (TBankGatewayException $exception) {
-            $attempt->forceFill(['status' => 'failed', 'error_message' => $exception->getMessage()])->save();
+            $attempt->forceFill(['status' => PaymentStatus::Failed, 'error_message' => $exception->getMessage()])->save();
             throw $exception;
         }
 
@@ -58,7 +59,7 @@ class CreateTBankPayment
             'provider_payment_id' => $result['payment_id'],
             'payment_url' => $result['payment_url'],
             'provider_status' => $result['provider_status'],
-            'status' => 'pending',
+            'status' => PaymentStatus::Pending,
         ])->save();
 
         return $attempt;

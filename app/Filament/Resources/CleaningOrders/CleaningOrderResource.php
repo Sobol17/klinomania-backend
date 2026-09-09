@@ -15,6 +15,7 @@ use App\Filament\Resources\CleaningOrders\RelationManagers\ComplaintsRelationMan
 use App\Filament\Resources\CleaningOrders\RelationManagers\LineItemsRelationManager;
 use App\Filament\Resources\CleaningOrders\RelationManagers\PaymentAttemptsRelationManager;
 use App\Filament\Resources\CleaningOrders\Support\OrderChecklistView;
+use App\Filament\Resources\PaymentAttempts\PaymentAttemptResource;
 use App\Filament\Resources\Users\UserResource;
 use App\Models\CleaningOrder;
 use App\Models\ServiceOption;
@@ -261,10 +262,10 @@ class CleaningOrderResource extends Resource
                         TableColumn::make('Ошибка'),
                     ])
                     ->schema([
-                        TextEntry::make('provider')->label('Провайдер'),
-                        TextEntry::make('amount')->label('Сумма')->money('RUB'),
+                        TextEntry::make('provider')->label('Провайдер')->formatStateUsing(fn (string $state): string => $state === 'tbank' ? 'T-Bank (tbank)' : $state),
+                        TextEntry::make('amount')->label('Сумма')->money(fn ($record): string => $record->currency, divideBy: 100),
                         TextEntry::make('status')->label('Статус')->badge(),
-                        TextEntry::make('created_at')->label('Создана')->dateTime(),
+                        TextEntry::make('created_at')->label('Создана')->dateTime()->url(fn ($record): string => PaymentAttemptResource::getUrl('view', ['record' => $record])),
                         TextEntry::make('confirmed_at')->label('Подтверждена')->dateTime()->placeholder('—'),
                         TextEntry::make('error_message')->label('Ошибка')
                             ->formatStateUsing(fn (?string $state, $record): ?string => filled($record->error_code) ? "{$record->error_code}: {$state}" : $state)

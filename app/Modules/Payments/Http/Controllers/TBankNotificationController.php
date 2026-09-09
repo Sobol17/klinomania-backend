@@ -3,6 +3,7 @@
 namespace App\Modules\Payments\Http\Controllers;
 
 use App\Enums\OrderStatus;
+use App\Enums\PaymentStatus;
 use App\Http\Controllers\Controller;
 use App\Models\PaymentAttempt;
 use App\Modules\Notifications\Events\OrderStatusChanged;
@@ -42,9 +43,9 @@ class TBankNotificationController extends Controller
             $success = filter_var($payload['Success'] ?? false, FILTER_VALIDATE_BOOLEAN);
             $isConfirmed = $success && ($payload['Status'] ?? null) === 'CONFIRMED';
             if ($isConfirmed) {
-                $attempt->forceFill(['status' => 'confirmed', 'confirmed_at' => $attempt->confirmed_at ?? now()]);
+                $attempt->forceFill(['status' => PaymentStatus::Confirmed, 'confirmed_at' => $attempt->confirmed_at ?? now()]);
             } elseif (! $success) {
-                $attempt->forceFill(['status' => 'failed']);
+                $attempt->forceFill(['status' => PaymentStatus::Failed]);
             }
             $attempt->save();
 
