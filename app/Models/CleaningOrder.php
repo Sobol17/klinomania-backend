@@ -64,6 +64,11 @@ class CleaningOrder extends Model
         return $this->hasMany(PaymentAttempt::class);
     }
 
+    public function complaints(): HasMany
+    {
+        return $this->hasMany(Complaint::class);
+    }
+
     public function getRouteKeyName(): string
     {
         return 'public_id';

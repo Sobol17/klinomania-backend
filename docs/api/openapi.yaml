@@ -11,6 +11,7 @@ tags:
   - name: Cleaner Auth
   - name: Services
   - name: Client Orders
+  - name: Complaints
   - name: Cleaner Orders
   - name: Payments
   - name: Profiles
@@ -303,6 +304,54 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /client/orders/{order}/complaints:
+    post:
+      tags: [Complaints]
+      summary: Submit a complaint about an order
+      description: Available only to the order owner when the order is in_progress, awaiting_payment, or completed.
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateComplaintRequest'}
+      responses:
+        '201':
+          description: Complaint created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ComplaintResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: Complaint is not allowed for the current order status
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              example: {message: A complaint cannot be submitted for an order in its current status., code: complaint_not_allowed}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429':
+          description: Complaint submission rate limit exceeded
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+              example: {message: Too many complaint submission attempts., code: rate_limited}
+  /client/complaints:
+    get:
+      tags: [Complaints]
+      summary: List the current client's complaints
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Client complaints, newest first
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ComplaintListResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /client/push-token:
     post:
       tags: [Push Notifications]
@@ -669,6 +718,38 @@ components:
               properties:
                 id: {type: string}
                 title: {type: string}
+    CreateComplaintRequest:
+      type: object
+      required: [subject, message]
+      properties:
+        subject: {type: string, minLength: 1, maxLength: 255}
+        message: {type: string, minLength: 1, maxLength: 5000}
+    Complaint:
+      type: object
+      required: [id, order_id, status, status_label, subject, message, created_at, updated_at]
+      properties:
+        id: {type: integer}
+        order_id: {type: string, description: Public order ULID}
+        status: {type: string, enum: [new, in_progress, resolved, rejected]}
+        status_label: {type: string}
+        subject: {type: string}
+        message: {type: string}
+        admin_comment: {type: [string, 'null']}
+        resolved_at: {type: [string, 'null'], format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ComplaintResponse:
+      type: object
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/Complaint'}
+    ComplaintListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: {$ref: '#/components/schemas/Complaint'}
     PaymentLinkResponse:
       type: object
       required: [data]

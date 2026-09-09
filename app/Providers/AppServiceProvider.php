@@ -4,12 +4,14 @@ namespace App\Providers;
 
 use App\Enums\UserRole;
 use App\Models\User;
+use App\Modules\Complaints\Events\ComplaintCreated;
 use App\Modules\Identity\Contracts\SmsGateway;
 use App\Modules\Identity\Gateways\NotisendSmsGateway;
 use App\Modules\Notifications\Contracts\PushGateway;
 use App\Modules\Notifications\Events\OrderCreated;
 use App\Modules\Notifications\Events\OrderStatusChanged;
 use App\Modules\Notifications\Gateways\FirebasePushGateway;
+use App\Modules\Notifications\Listeners\NotifyAdminsAboutNewComplaint;
 use App\Modules\Notifications\Listeners\NotifyAdminsAboutNewOrder;
 use App\Modules\Notifications\Listeners\SendOrderStatusPush;
 use App\Modules\Payments\Contracts\TBankGateway;
@@ -55,6 +57,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('access-admin', fn (User $user): bool => $user->role === UserRole::Admin);
 
         Event::listen(OrderCreated::class, NotifyAdminsAboutNewOrder::class);
+        Event::listen(ComplaintCreated::class, NotifyAdminsAboutNewComplaint::class);
         Event::listen(OrderStatusChanged::class, SendOrderStatusPush::class);
 
         RateLimiter::for('order-checkout', function (Request $request): Limit {
@@ -62,6 +65,15 @@ class AppServiceProvider extends ServiceProvider
                 ->by((string) ($request->user()?->id ?? $request->ip()))
                 ->response(fn () => response()->json([
                     'message' => 'Too many order creation attempts.',
+                    'code' => 'rate_limited',
+                ], 429));
+        });
+
+        RateLimiter::for('complaint-submission', function (Request $request): Limit {
+            return Limit::perMinute(5)
+                ->by((string) ($request->user()?->id ?? $request->ip()))
+                ->response(fn () => response()->json([
+                    'message' => 'Too many complaint submission attempts.',
                     'code' => 'rate_limited',
                 ], 429));
         });

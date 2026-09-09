@@ -40,4 +40,9 @@ enum OrderStatus: string implements HasColor, HasLabel
             self::Cancelled => 'danger',
         };
     }
+
+    public function allowsComplaint(): bool
+    {
+        return in_array($this, [self::InProgress, self::AwaitingPayment, self::Completed], true);
+    }
 }

@@ -90,6 +90,12 @@ Response `200`:
 
 Т-Банк отправляет статус напрямую на `POST /api/v1/payments/tbank/notifications`. Этот endpoint не предназначен для мобильного клиента: backend проверяет `Token`, терминал и сумму операции. Только валидное уведомление с `Success=true` и `Status=CONFIRMED` переводит заявку в `completed`; возврат пользователя из платёжной формы на статус заявки не влияет.
 
+### Подать жалобу
+
+Для заявки в статусе `in_progress`, `awaiting_payment` или `completed` клиент может подать
+жалобу через `POST /api/v1/client/orders/{public_id}/complaints`. Полный контракт и список
+жалоб описаны в `complaints.md`.
+
 Правила регистрации устройства и payload статусных уведомлений приведены в
 `push-notifications.md`.
 

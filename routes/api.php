@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\CleanerWork\Http\Controllers\CleanerOrderController;
+use App\Modules\Complaints\Http\Controllers\ClientComplaintController;
 use App\Modules\Identity\Http\Controllers\CleanerAuthController;
 use App\Modules\Identity\Http\Controllers\ClientAuthController;
 use App\Modules\Notifications\Http\Controllers\ClientPushTokenController;
@@ -32,6 +33,8 @@ Route::prefix('v1')->group(function (): void {
         Route::get('client/orders/{order}', [ClientOrderController::class, 'show']);
         Route::post('client/orders/{order}/payment', [ClientPaymentController::class, 'store']);
         Route::post('client/orders/{order}/cancel', [ClientOrderController::class, 'cancel']);
+        Route::post('client/orders/{order}/complaints', [ClientComplaintController::class, 'store'])->middleware('throttle:complaint-submission');
+        Route::get('client/complaints', [ClientComplaintController::class, 'index']);
 
         Route::get('cleaner/profile', [ProfileController::class, 'cleaner']);
         Route::get('cleaner/orders', [CleanerOrderController::class, 'orders']);

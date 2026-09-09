@@ -86,8 +86,9 @@ TBANK_NOTIFICATION_URL=${APP_URL}/api/v1/payments/tbank/notifications
 
 `docker-compose.yaml` принудительно задает контейнерное имя `postgres` и database-драйверы Laravel. Значения `DB_DATABASE`, `DB_USERNAME` и `DB_PASSWORD` берутся из `.env` одновременно приложением и контейнером PostgreSQL.
 
-Worker `queue` должен постоянно работать: через него отправляются email- и
-PUSH-уведомления. Адрес в `APP_URL` используется для ссылки на заявку в письме.
+Worker `queue` должен постоянно работать: через него отправляются email-уведомления о новых
+заявках и жалобах, а также PUSH-уведомления. Адрес в `APP_URL` используется для прямых ссылок
+на заявку или жалобу в письме.
 
 Сгенерируйте надежные пароли любым доступным password manager. `.env` и Firebase service-account JSON нельзя коммитить.
 

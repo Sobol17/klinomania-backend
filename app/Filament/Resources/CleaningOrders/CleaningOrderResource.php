@@ -11,6 +11,7 @@ use App\Filament\Resources\CleaningOrders\Pages\ListCleaningOrders;
 use App\Filament\Resources\CleaningOrders\Pages\ViewCleaningOrder;
 use App\Filament\Resources\CleaningOrders\RelationManagers\ChecklistRelationManager;
 use App\Filament\Resources\CleaningOrders\RelationManagers\CleanersRelationManager;
+use App\Filament\Resources\CleaningOrders\RelationManagers\ComplaintsRelationManager;
 use App\Filament\Resources\CleaningOrders\RelationManagers\LineItemsRelationManager;
 use App\Filament\Resources\CleaningOrders\RelationManagers\PaymentAttemptsRelationManager;
 use App\Filament\Resources\CleaningOrders\Support\OrderChecklistView;
@@ -271,8 +272,17 @@ class CleaningOrderResource extends Resource
                     ]),
             ]),
             Section::make('Жалобы')->schema([
-                TextEntry::make('complaints_placeholder')->hiddenLabel()
-                    ->state('Жалоб нет. Раздел начнёт отображать обращения после подключения модуля ADM-06.'),
+                RepeatableEntry::make('complaints')->hiddenLabel()->placeholder('Жалоб нет')
+                    ->table([
+                        TableColumn::make('Тема'),
+                        TableColumn::make('Статус'),
+                        TableColumn::make('Дата'),
+                    ])
+                    ->schema([
+                        TextEntry::make('subject')->label('Тема'),
+                        TextEntry::make('status')->label('Статус')->badge(),
+                        TextEntry::make('created_at')->label('Дата')->dateTime(),
+                    ]),
             ]),
         ]);
     }
@@ -284,6 +294,7 @@ class CleaningOrderResource extends Resource
             LineItemsRelationManager::class,
             ChecklistRelationManager::class,
             PaymentAttemptsRelationManager::class,
+            ComplaintsRelationManager::class,
         ];
     }
 
